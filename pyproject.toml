@@ -22,7 +22,6 @@ dependencies = [
     'argschema',
     'astropy',
     'photutils',
-    's3fs',
     'imlib'
 ]
 
@@ -39,7 +38,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["code/src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aind_smartspim_segmentation.__version__"}

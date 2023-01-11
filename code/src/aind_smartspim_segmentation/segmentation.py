@@ -186,7 +186,7 @@ class Segment(ArgSchemaParser):
         # load signal data
         signal_array = self.__read_zarr_image(image_path)
 
-        # check if background sublations will be run - ASK NICK
+        # check if background sublations will be run
         if self.args["bkg_subtract"]:
             signal_array = astro_preprocess(signal_array, "MMMBackground")
 

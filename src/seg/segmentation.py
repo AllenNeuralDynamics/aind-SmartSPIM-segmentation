@@ -8,21 +8,23 @@ Created on Thu Dec  8 15:06:14 2022
 import os
 import s3fs
 import shutil
-Import utils
 
 import dask.array as da
 
 from glob import glob
 from natsort import natsorted
-from imlib.IO.cells import save_cells, get_cells
-from cellfinder_core.detect import detect
+
+from .utils import astro_preprocess
+from .cellfinder_core.detect import detect
+
 from argschema.fields import Str , Int, Boolean
 from argschema import ArgSchemaParser, ArgSchema
+from imlib.IO.cells import save_cells, get_cells
 
 example_input = {"signal_data": "/Users/nicholas.lusk/allen/programs/aind/workgroups/msma/SmartSPIM/ephys/SmartSPIM_625382_2022_09_09_22_10_21_stitched/stitched/OMEZarr/Ex_488_Em_525.zarr/0",
                  "chunk_size": 500,
-                 "bkg_subtract": True,
-                 "save_dir": None}
+                 "bkg_subtract": False,
+                 "save_dir": "/Users/nicholas.lusk/Documents/cell_locations"}
 
 
 class SegSchema(ArgSchema):
@@ -63,9 +65,10 @@ class Segment(ArgSchemaParser):
             exit(0)
         
    	
-	# check if background sublations will be run
-	if self.args['bkg_subtract']:
-	    signal_array
+        #check if background sublations will be run
+        #helps in tissue where autofluorescence is high
+        if self.args['bkg_subtract']:
+            signal_array = astro_preprocess(signal_array, 'MMMBackground')
 	
         # effective parameters found to work with SmartSPIM nuclei signals
         start_plane = 0

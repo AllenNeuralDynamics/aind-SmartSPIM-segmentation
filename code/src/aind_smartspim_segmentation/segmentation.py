@@ -123,7 +123,7 @@ class SegSchema(ArgSchema):
         }
     )
 
-    signal_data = Str(
+    save_path = Str(
         metadata={
             "required": True,
             "description": "Location to save segmentation .xml file",
@@ -225,7 +225,7 @@ def main():
     default_params = {
         "chunk_size": 500,
         "bkg_subtract": True,
-        "save_dir": None,
+        "save_path": None,
     }
 
     seg = Segment(default_params)

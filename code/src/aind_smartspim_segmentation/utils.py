@@ -14,8 +14,7 @@ from scipy import ndimage as ndi
 from astropy.stats import SigmaClip
 from photutils.background import Background2D
 
-''' Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
-for contrast enhancement and statistical background subtraction'''
+
 def astro_preprocess(
     img, 
     estimator, 
@@ -26,6 +25,9 @@ def astro_preprocess(
     smooth = False
 ):
     """
+    Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
+    for contrast enhancement and statistical background subtraction
+    
     Parameters
     ----------
     img : array

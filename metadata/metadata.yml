@@ -1,0 +1,6 @@
+metadata_version: 1
+name: AIND SmartSPIM Segmentation
+description: A capsule that segments cells from SmartSPIM data
+authors:
+- name: AIND
+- name: AIBS

@@ -21,7 +21,7 @@ from argschema.fields import Boolean, Int, Str
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
 
-from .cellfinder_core.detect import detect
+from cellfinder_core.detect import detect
 from .utils import astro_preprocess
 
 PathLike = Union[str, Path]

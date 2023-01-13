@@ -8,9 +8,9 @@ from multiprocessing.pool import Pool
 
 from imlib.IO.cells import save_cells
 from imlib.general.system import get_num_processes
-from cellfinder_core.detect.filters.plane import TileProcessor
-from cellfinder_core.detect.filters.setup_filters import setup_tile_filtering
-from cellfinder_core.detect.filters.volume.volume_filter import VolumeFilter
+from .filters.plane import TileProcessor
+from .filters.setup_filters import setup_tile_filtering
+from .filters.volume.volume_filter import VolumeFilter
 
 
 def calculate_parameters_in_pixels(

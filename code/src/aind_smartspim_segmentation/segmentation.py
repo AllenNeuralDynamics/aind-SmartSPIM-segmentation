@@ -113,14 +113,16 @@ class SegSchema(ArgSchema):
         metadata={
             "required": True,
             "description": "Number of planes per chunk (needed to prevent memory crashes)",
-        }
+        },
+        dump_default=500
     )
 
     bkg_subtract = Boolean(
         metadata={
             "required": True,
             "description": "Whether to run background subtraction",
-        }
+        },
+        dump_default=True
     )
 
     save_path = Str(
@@ -158,9 +160,14 @@ class Segment(ArgSchemaParser):
         signal_array = da.from_zarr(image_path)
         return signal_array
 
-    def run(self) -> None:
+    def run(self) -> str:
         """
         Runs SmartSPIM Segmentation
+
+        Returns
+        ----------
+        str
+            Image path that was used for cell segmentation
         """
 
         smartspim_config = get_yaml_config(self.args["config_file"])
@@ -183,6 +190,16 @@ class Segment(ArgSchemaParser):
             f"{self.args['input_channel']}/{self.args['input_scale']}"
         )
 
+        if not os.path.isdir(str(image_path)):
+            
+            root_path = Path(self.args['input_data'])
+            channels = [folder for folder in os.listdir(root_path) if folder != '.zgroup']
+
+            selected_channel = channels[0]
+
+            logger.info(f"Directory {image_path} does not exist! Setting registration to the first available channel: {selected_channel}")
+            image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
+
         # load signal data
         signal_array = self.__read_zarr_image(image_path)
 
@@ -196,6 +213,8 @@ class Segment(ArgSchemaParser):
             chunk_size=self.args["chunk_size"],
             **smartspim_config,
         )
+
+        return str(image_path)
 
     def merge(self):
         """
@@ -225,7 +244,7 @@ def main():
     default_params = {
         "chunk_size": 500,
         "bkg_subtract": True,
-        "save_path": None,
+        "save_path": '/results/',
     }
 
     seg = Segment(default_params)

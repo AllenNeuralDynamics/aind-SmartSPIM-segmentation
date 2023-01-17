@@ -66,8 +66,9 @@ def main():
     in code ocean
     """
     image_path = segmentation.main()
-    exit()
     bucket_path = 'aind-open-data'
+
+    output_folder = '/results'
 
     dataset_folder = str(sys.argv[2]).replace('/data/', '')
     channel_name = image_path.split('/')[-2].replace('.zarr', '')
@@ -75,13 +76,13 @@ def main():
     s3_path = f"s3://{bucket_path}/{dataset_name}"
 
     for out in execute_command_helper(
-        f"aws s3 mv --recursive {output_folder} {s3_path}"
+        f"aws s3 mv --recursive {output_folder} {s3_path} --dryrun"
     ):
         print(out)
 
     save_string_to_txt(
-        f"Results of CCF registration saved in: {s3_path}",
-        "/root/capsule/results/output_ccf.txt"
+        f"Results of cell segmentation saved in: {s3_path}",
+        "/root/capsule/results/output_segmentation.txt"
     )
     
 

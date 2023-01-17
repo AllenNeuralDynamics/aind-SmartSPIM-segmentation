@@ -13,6 +13,7 @@ RUN pip install -U --no-cache-dir \
     astropy \
     photutils \
     imlib \
-    zarr==2.13.3
+    zarr \
+    git+https://github.com/camilolaiton/cellfinder-core.git@feature/lazy_reader
 
 RUN conda install -c conda-forge awscli

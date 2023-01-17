@@ -1,6 +1,6 @@
 # Leave blank to use defaults
 start_plane: 0
-end_plane: 0
+end_plane: -1
 n_free_cpus: 2
 voxel_sizes: 
   - 2 # Z
@@ -13,3 +13,4 @@ log_sigma_size: 0.1
 n_sds_above_mean_thresh: 3
 soma_spread_factor: 1.4
 max_cluster_size: 100000
+ball_z_size: 8

@@ -33,7 +33,6 @@ logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-
 def get_smartspim_default_config() -> dict:
     """
     Effective parameters found to work with SmartSPIM nuclei signals
@@ -122,7 +121,7 @@ class SegSchema(ArgSchema):
             "required": True,
             "description": "Whether to run background subtraction",
         },
-        dump_default=True
+        dump_default=False
     )
 
     save_path = Str(
@@ -182,7 +181,7 @@ class Segment(ArgSchemaParser):
             )
 
         # create temporary folder for storing chunked data
-        self.tmp_path = os.path.join(os.getcwd(), "tmp")
+        self.tmp_path = os.path.join('/results/', "tmp")
         if not os.path.exists(self.tmp_path):
             os.mkdir(self.tmp_path)
 
@@ -205,8 +204,12 @@ class Segment(ArgSchemaParser):
 
         # check if background sublations will be run
         if self.args["bkg_subtract"]:
+            logger.info("Starting background substraction")
             signal_array = astro_preprocess(signal_array, "MMMBackground")
-
+        
+        # Loading only 3D data
+        signal_array = signal_array[0, 0, :, :, :]
+        logger.info(f"Starting detection with array {signal_array}")
         detect.main(
             signal_array=signal_array,
             save_path=self.tmp_path,
@@ -243,7 +246,7 @@ def main():
 
     default_params = {
         "chunk_size": 500,
-        "bkg_subtract": True,
+        "bkg_subtract": False,
         "save_path": '/results/',
     }
 

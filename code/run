@@ -2,6 +2,5 @@
 set -ex
 
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
-echo "Sorry, we couldn't automatically determine the right command for this file type. Please replace this line with a command to run 'run'."
 
-# python main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yaml --input_data /data/SmartSPIM_644107_2022-12-09_16-01-44_stitched_2022-12-16_17-06-28/processed/OMEZarr --input_channel Ex_488_Em_525 --input_scale 0
+python -u main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yml --input_data /data/"$1"/processed/OMEZarr --input_channel "$2" --input_scale "$3"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
-# This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
+source /opt/conda/etc/profile.d/conda.sh
+conda activate segmenter
 
-python -u main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yml --input_data /data/"$1"/processed/OMEZarr --input_channel "$2" --input_scale "$3"
+# This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
+python -u main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yml --input_data /data/"$1"/processed/OMEZarr --input_channel "$2".zarr --input_scale "$3" --chunk_size "$4"

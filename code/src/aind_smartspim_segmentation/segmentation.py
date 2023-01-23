@@ -181,7 +181,8 @@ class Segment(ArgSchemaParser):
             )
 
         # create temporary folder for storing chunked data
-        self.tmp_path = os.path.join('/results/', "tmp")
+        self.tmp_path = os.path.join(self.args["save_path"], "cells")
+
         if not os.path.exists(self.tmp_path):
             os.mkdir(self.tmp_path)
 
@@ -196,7 +197,7 @@ class Segment(ArgSchemaParser):
 
             selected_channel = channels[0]
 
-            logger.info(f"Directory {image_path} does not exist! Setting registration to the first available channel: {selected_channel}")
+            logger.info(f"Directory {image_path} does not exist! Setting segmentation to the first available channel: {selected_channel}")
             image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
 
         # load signal data
@@ -225,34 +226,42 @@ class Segment(ArgSchemaParser):
         """
 
         # load temporary files and save to a single list
+        logger.info(f"Reading XMLS from cells path: {self.tmp_path}")
         cells = []
-        tmp_files = glob(os.path.join(self.tmp_path, ".xml"))
+        tmp_files = glob(self.tmp_path + '/*.xml')
+
         for f in natsorted(tmp_files):
             cells.extend(get_cells(f))
 
         # save list of all cells
-        save_cells(os.path.join(self.args["save_path"], "detected_cells.xml"))
+        save_cells(
+            cells=cells,
+            xml_file_path=os.path.join(
+                self.args["save_path"], "detected_cells.xml"
+            )
+        )
 
         # delete tmp folder
-        try:
-            shutil.rmtree(self.tmp_path)
-        except OSError as e:
-            logger.error(
-                f"Error removing temp file {self.tmp_path} : {e.strerror}"
-            )
+        # try:
+        #     shutil.rmtree(self.tmp_path)
+        # except OSError as e:
+        #     logger.error(
+        #         f"Error removing temp file {self.tmp_path} : {e.strerror}"
+        #     )
 
 
 def main():
 
     default_params = {
-        "chunk_size": 500,
         "bkg_subtract": False,
         "save_path": '/results/',
     }
 
     seg = Segment(default_params)
-    seg.run()
+    image_path = seg.run()
     seg.merge()
+
+    return image_path
 
 
 if __name__ == "__main__":

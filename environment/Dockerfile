@@ -6,14 +6,17 @@ ARG GIT_ASKPASS
 ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
+RUN conda create -n segmenter python=3.8
+SHELL ["conda", "run", "-n", "segmenter", "/bin/bash", "-c"]
+
 RUN pip install -U --no-cache-dir \
     dask \
-    argschema \
-    natsort \
-    astropy \
-    photutils \
-    imlib \
-    zarr \
+    argschema==3.0.4 \
+    natsort==8.2.0 \
+    astropy==5.2.1 \
+    photutils==1.6.0 \
+    imlib==0.1.3 \
+    zarr==2.13.6 \
     git+https://github.com/camilolaiton/cellfinder-core.git@feature/lazy_reader
 
 RUN conda install -c conda-forge awscli

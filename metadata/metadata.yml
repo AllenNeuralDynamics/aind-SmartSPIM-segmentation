@@ -1,6 +1,13 @@
 metadata_version: 1
-name: AIND SmartSPIM Segmentation
-description: A capsule that segments cells from SmartSPIM data
+name: SmartSPIM Cell Segmentation Capsule
+description: A tool for automated segmentation of Cells or Nuclei from wholebrain
+  lightsheet image volumes
+tags:
+- SmartSPIM
 authors:
-- name: AIND
-- name: AIBS
+- name: Nicholas Lusk
+  affiliations:
+  - name: Allen Institute of Brain Science
+- name: Camilo Laiton
+  affiliations:
+  - name: Allen Institute for Neural Dynamics

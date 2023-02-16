@@ -1,1 +1,2 @@
-__version__ = "0.0.1"
+"""Init file for cell segmentation"""
+__version__ = "0.0.2"

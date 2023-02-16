@@ -9,20 +9,22 @@ Module for the segmentation of smartspim datasets
 """
 import logging
 import os
-import shutil
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import Union
 
 import dask.array as da
 import yaml
+from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile
 from argschema.fields import Boolean, Int, Str
+from cellfinder_core.detect import detect
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
 
-from cellfinder_core.detect import detect
-from .utils import astro_preprocess
+from .__init__ import __version__
+from .utils import astro_preprocess, create_folder, generate_processing
 
 PathLike = Union[str, Path]
 
@@ -32,6 +34,7 @@ LOG_DATE_FMT = "%Y-%m-%d %H:%M"
 logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 def get_smartspim_default_config() -> dict:
     """
@@ -94,41 +97,35 @@ class SegSchema(ArgSchema):
     )
 
     input_data = Str(
-        metadata={
-            "required": True,
-            "description": "Dataset path where the OMEZarr is located",
-        }
+        metadata={"required": True, "description": "Dataset path where the OMEZarr is located",}
     )
 
-    input_channel = Str(
-        metadata={"required": True, "description": "Channel to segment"}
-    )
+    input_channel = Str(metadata={"required": True, "description": "Channel to segment"})
 
-    input_scale = Int(
-        metadata={"required": True, "description": "Zarr scale to start with"}
-    )
+    input_scale = Int(metadata={"required": True, "description": "Zarr scale to start with"})
 
     chunk_size = Int(
         metadata={
             "required": True,
-            "description": "Number of planes per chunk (needed to prevent memory crashes)",
+            "description": """
+            Number of planes per chunk
+            (needed to prevent memory crashes)
+            """,
         },
-        dump_default=500
+        dump_default=500,
     )
 
     bkg_subtract = Boolean(
-        metadata={
-            "required": True,
-            "description": "Whether to run background subtraction",
-        },
-        dump_default=False
+        metadata={"required": True, "description": "Whether to run background subtraction",},
+        dump_default=False,
     )
 
     save_path = Str(
-        metadata={
-            "required": True,
-            "description": "Location to save segmentation .xml file",
-        }
+        metadata={"required": True, "description": "Location to save segmentation .xml file",}
+    )
+
+    metadata_path = Str(
+        metadata={"required": True, "description": "Location to save metadata files",}
     )
 
 
@@ -180,42 +177,102 @@ class Segment(ArgSchemaParser):
                 """
             )
 
-        # create temporary folder for storing chunked data
-        self.tmp_path = os.path.join(self.args["save_path"], "cells")
-
-        if not os.path.exists(self.tmp_path):
-            os.mkdir(self.tmp_path)
+        # create metadata folder
+        create_folder(self.args["metadata_path"])
 
         image_path = Path(self.args["input_data"]).joinpath(
             f"{self.args['input_channel']}/{self.args['input_scale']}"
         )
 
         if not os.path.isdir(str(image_path)):
-            
-            root_path = Path(self.args['input_data'])
-            channels = [folder for folder in os.listdir(root_path) if folder != '.zgroup']
+
+            root_path = Path(self.args["input_data"])
+            channels = [folder for folder in os.listdir(root_path) if folder != ".zgroup"]
 
             selected_channel = channels[0]
 
-            logger.info(f"Directory {image_path} does not exist! Setting segmentation to the first available channel: {selected_channel}")
+            logger.info(
+                f"""Directory {image_path} does not exist!
+                Setting segmentation to the first
+                available channel: {selected_channel}"""
+            )
             image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
 
+        data_processes = []
+
         # load signal data
+        start_date_time = datetime.now()
         signal_array = self.__read_zarr_image(image_path)
+        end_date_time = datetime.now()
+
+        data_processes.append(
+            DataProcess(
+                name="Image importing",
+                version=__version__,
+                start_date_time=start_date_time,
+                end_date_time=end_date_time,
+                input_location=str(image_path),
+                output_location=str(image_path),
+                code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
+                parameters={},
+                notes="Importing stitched data for cell segmentation",
+            )
+        )
 
         # check if background sublations will be run
         if self.args["bkg_subtract"]:
             logger.info("Starting background substraction")
+            start_date_time = datetime.now()
             signal_array = astro_preprocess(signal_array, "MMMBackground")
-        
+            end_date_time = datetime.now()
+
+            data_processes.append(
+                DataProcess(
+                    name="Image background subtraction",  # Cell segmentation
+                    version=__version__,
+                    start_date_time=start_date_time,
+                    end_date_time=end_date_time,
+                    input_location=str(image_path),
+                    output_location="In memory array",
+                    code_url="https://github.com/astropy/astropy.github.com",
+                    parameters=smartspim_config,
+                    notes="Background subtraction",
+                )
+            )
+
         # Loading only 3D data
         signal_array = signal_array[0, 0, :, :, :]
         logger.info(f"Starting detection with array {signal_array}")
+
+        start_date_time = datetime.now()
         detect.main(
             signal_array=signal_array,
-            save_path=self.tmp_path,
+            save_path=self.args["metadata_path"],
             chunk_size=self.args["chunk_size"],
             **smartspim_config,
+        )
+        end_date_time = datetime.now()
+
+        data_processes.append(
+            DataProcess(
+                name="Image cell segmentation",  # Cell segmentation
+                version=__version__,
+                start_date_time=start_date_time,
+                end_date_time=end_date_time,
+                input_location=str(image_path),
+                output_location=str(self.args["metadata_path"]),
+                code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/lazy_reader",
+                parameters=smartspim_config,
+                notes="Cell segmentation with XML outputs",
+            )
+        )
+
+        processing_path = Path(self.args["metadata_path"]).joinpath("processing.json")
+
+        generate_processing(
+            data_processes=data_processes,
+            dest_processing=processing_path,
+            pipeline_version=__version__,
         )
 
         return str(image_path)
@@ -226,35 +283,35 @@ class Segment(ArgSchemaParser):
         """
 
         # load temporary files and save to a single list
-        logger.info(f"Reading XMLS from cells path: {self.tmp_path}")
+        logger.info(f"Reading XMLS from cells path: {self.args['metadata_path']}")
         cells = []
-        tmp_files = glob(self.tmp_path + '/*.xml')
+        tmp_files = glob(self.args["metadata_path"] + "/*.xml")
 
         for f in natsorted(tmp_files):
             cells.extend(get_cells(f))
 
         # save list of all cells
         save_cells(
-            cells=cells,
-            xml_file_path=os.path.join(
-                self.args["save_path"], "detected_cells.xml"
-            )
+            cells=cells, xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
         )
 
         # delete tmp folder
         # try:
-        #     shutil.rmtree(self.tmp_path)
+        #     shutil.rmtree(self.args["metadata_path"])
         # except OSError as e:
         #     logger.error(
-        #         f"Error removing temp file {self.tmp_path} : {e.strerror}"
+        #         f"Error removing temp file {self.args["metadata_path"]} : {e.strerror}"
         #     )
 
 
 def main():
-
+    """
+    Main function
+    """
     default_params = {
         "bkg_subtract": False,
-        "save_path": '/results/',
+        "save_path": "/results/",
+        "metadata_path": "/results/metadata",
     }
 
     seg = Segment(default_params)

@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -26,19 +25,22 @@ Created on Mon Jan  9 16:21:44 2023
 
 # Script for running MUSICA algorithm on a grayscale image:
 
-import numpy as np
 import copy
-from skimage.transform import pyramid_reduce, pyramid_expand
+
+import numpy as np
+from skimage.transform import pyramid_expand, pyramid_reduce
 
 
 def isPowerofTwo(x):
-    # check if number x is a power of two
-    return x and (not(x & (x - 1)))
+    """Check if number x is a power of two"""
+    return x and (not (x & (x - 1)))
 
 
 def findNextPowerOf2(n):
-    # taken from https://www.techiedelight.com/round-next-highest-power-2/
-    # Function will find next power of 2
+    """
+    taken from https://www.techiedelight.com/round-next-highest-power-2/
+    Function will find next power of 2
+    """
 
     # decrement `n` (to handle cases when `n` itself
     # is a power of 2)
@@ -78,10 +80,7 @@ def resize_image(img):
         nextpower = findNextPowerOf2(col)
         coldiff = nextpower - col
 
-    img_ = np.pad(
-        img,
-        ((0, rowdiff), (0, coldiff)),
-        'reflect')
+    img_ = np.pad(img, ((0, rowdiff), (0, coldiff)), "reflect")
     return img_
 
 
@@ -126,7 +125,7 @@ def laplacian_pyramid(img, L):
     # Laplacian Pyramid:
     lp = []
     for layer in range(L):
-        tmp = pyramid_expand(gauss[layer+1], preserve_range=True)
+        tmp = pyramid_expand(gauss[layer + 1], preserve_range=True)
         tmp = gauss[layer] - tmp
         lp.append(tmp)
     lp.append(gauss[L])
@@ -149,21 +148,19 @@ def enhance_coefficients(laplacian, L, params):
         List of enhanced pyramid coeffiencts.
     """
     # Non linear operation goes here:
-    M = params['M']
-    p = params['p']
-    a = params['a']
+    M = params["M"]
+    p = params["p"]
+    a = params["a"]
     for layer in range(L):
         x = laplacian[layer]
         # removing all negative coefficients:
         # an attempt to reduce double edges
         x[x < 0] = 0.0
-        G = a[layer]*M
-        laplacian[layer] = G*np.multiply(
-            np.divide(
-                x, np.abs(x), out=np.zeros_like(x), where=x != 0),
-            np.power(
-                np.divide(
-                    np.abs(x), M), p))
+        G = a[layer] * M
+        laplacian[layer] = G * np.multiply(
+            np.divide(x, np.abs(x), out=np.zeros_like(x), where=x != 0),
+            np.power(np.divide(np.abs(x), M), p),
+        )
     return laplacian
 
 
@@ -183,7 +180,7 @@ def reconstruct_image(laplacian, L):
     """
     # Reconstructing original image from laplacian pyramid
     rs = laplacian[L]
-    for i in range(L-1, -1, -1):
+    for i in range(L - 1, -1, -1):
         rs = pyramid_expand(rs, preserve_range=True)
         rs = np.add(rs, laplacian[i])
     return rs
@@ -212,5 +209,5 @@ def musica(img, L, params):
     lp, _ = laplacian_pyramid(img_resized, L)
     lp = enhance_coefficients(lp, L, params)
     rs = reconstruct_image(lp, L)
-    rs = rs[:img.shape[0], :img.shape[1]]
+    rs = rs[: img.shape[0], : img.shape[1]]
     return rs

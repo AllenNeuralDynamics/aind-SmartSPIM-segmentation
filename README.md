@@ -2,18 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
-
-[![CI](https://github.com/AllenNeuralDynamics/library-repo-template/actions/workflows/ci.yml/badge.svg)](https://github.com/AllenNeuralDynamics/library-repo-template/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/AllenNeuralDynamics/library-repo-template/branch/main/graph/badge.svg?token=ZVZ98GLA9V)](https://codecov.io/gh/AllenNeuralDynamics/library-repo-template)
-
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-
-[//]: # "These badges work in public repos"
-
-[//]: # "![GitHub tag (latest SemVer pre-release)](https://img.shields.io/github/v/tag/AllenNeuralDynamics/library-repo-template?include_prereleases&sort=semver)"
-
-[//]: # "![GitHub release (latest by date)](https://img.shields.io/github/v/release/AllenNeuralDynamics/library-repo-template?display_name=release)"
-
 
 Template for a minimal, basic repository for an AIND library.
 
@@ -59,16 +48,6 @@ black .
 - Use **isort** to automatically sort import statements:
 ```bash
 isort .
-```
-
-- Use **actionlint** to check that the GitHub Actions workflows are valid:
-```bash
-actionlint
-```
-
-- Use **commitlint** to check that commit messages are valid:
-```bash
-commitlint --from=HEAD~1
 ```
 
 ### Pull requests

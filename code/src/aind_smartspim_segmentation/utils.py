@@ -25,7 +25,7 @@ def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=
     """
     Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
     for contrast enhancement and statistical background subtraction
-    
+
     Parameters
     ----------
     img : array
@@ -59,14 +59,12 @@ def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=
 
     # loop through z plane and run preprocessing
     for depth in range(img.shape[0]):
-
         curr_img = np.array(img[depth, :, :])
         sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
 
         # check if padding has been added and mask regions accordingly
         if pad > 0:
             if depth >= pad or depth < (img.shape[0] - pad):
-
                 # create boolean mask over padded region
                 mask = np.full(curr_img.shape, True)
                 mask[pad:-pad, pad:-pad] = False
@@ -115,7 +113,9 @@ def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=
 
 
 def generate_processing(
-    data_processes: List[dict], dest_processing: PathLike, pipeline_version: str,
+    data_processes: List[dict],
+    dest_processing: PathLike,
+    pipeline_version: str,
 ) -> None:
     """
     Generates data description for the output folder.

@@ -31,7 +31,6 @@ def save_string_to_txt(txt: str, filepath: str, mode="w") -> None:
 
 
 def execute_command_helper(command: str, print_command: bool = False) -> None:
-
     """
     Execute a shell command.
 
@@ -67,23 +66,27 @@ def main():
     in code ocean
     """
     image_path = segmentation.main()
-    bucket_path = "aind-open-data"
+    bucket_path = sys.argv[-1]
 
     output_folder = "/results"
 
-    dataset_folder = str(sys.argv[4]).split("/")[2]
-    channel_name = image_path.split("/")[-2].replace(".zarr", "")
+    if len(bucket_path):
+        dataset_folder = str(sys.argv[4]).split("/")[2]
+        channel_name = image_path.split("/")[-2].replace(".zarr", "")
 
-    dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
-    s3_path = f"s3://{bucket_path}/{dataset_name}"
+        dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
+        s3_path = f"s3://{bucket_path}/{dataset_name}"
 
-    for out in execute_command_helper(f"aws s3 mv --recursive {output_folder} {s3_path}"):
-        print(out)
+        for out in execute_command_helper(f"aws s3 mv --recursive {output_folder} {s3_path}"):
+            print(out)
 
-    save_string_to_txt(
-        f"Results of cell segmentation saved in: {s3_path}",
-        "/root/capsule/results/output_segmentation.txt",
-    )
+        save_string_to_txt(
+            f"Results of cell segmentation saved in: {s3_path}",
+            "/root/capsule/results/output_segmentation.txt",
+        )
+
+    else:
+        print("No bucket path provided, avoiding manual copy")
 
 
 if __name__ == "__main__":

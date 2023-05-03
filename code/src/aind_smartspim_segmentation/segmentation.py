@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import dask.array as da
 import yaml
@@ -97,7 +97,10 @@ class SegSchema(ArgSchema):
     )
 
     input_data = Str(
-        metadata={"required": True, "description": "Dataset path where the OMEZarr is located",}
+        metadata={
+            "required": True,
+            "description": "Dataset path where the OMEZarr is located",
+        }
     )
 
     input_channel = Str(metadata={"required": True, "description": "Channel to segment"})
@@ -116,16 +119,46 @@ class SegSchema(ArgSchema):
     )
 
     bkg_subtract = Boolean(
-        metadata={"required": True, "description": "Whether to run background subtraction",},
+        metadata={
+            "required": True,
+            "description": "Whether to run background subtraction",
+        },
         dump_default=False,
     )
 
     save_path = Str(
-        metadata={"required": True, "description": "Location to save segmentation .xml file",}
+        metadata={
+            "required": True,
+            "description": "Location to save segmentation .xml file",
+        }
     )
 
     metadata_path = Str(
-        metadata={"required": True, "description": "Location to save metadata files",}
+        metadata={
+            "required": True,
+            "description": "Location to save metadata files",
+        }
+    )
+
+    signal_start = Int(
+        metadata={
+            "required": True,
+            "description": "Z index (slice) where we want to start running segmentation on",
+        },
+        dump_default=0,
+    )
+
+    signal_end = Int(
+        metadata={
+            "required": True,
+            "description": "Z index (slice) where we want to end running segmentation on",
+        },
+        dump_default=-1,
+    )
+
+    bucket_path = Str(
+        required=True,
+        metadata={"description": "Amazon Bucket or Google Bucket name"},
     )
 
 
@@ -185,7 +218,6 @@ class Segment(ArgSchemaParser):
         )
 
         if not os.path.isdir(str(image_path)):
-
             root_path = Path(self.args["input_data"])
             channels = [folder for folder in os.listdir(root_path) if folder != ".zgroup"]
 
@@ -241,8 +273,19 @@ class Segment(ArgSchemaParser):
             )
 
         # Loading only 3D data
+        signal_start = self.args["signal_start"]
+        signal_end = self.args["signal_end"]
+        if signal_end == -1:
+            signal_end = signal_array.shape[2]
+
         signal_array = signal_array[0, 0, :, :, :]
-        logger.info(f"Starting detection with array {signal_array}")
+        logger.info(
+            f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
+        )
+
+        # Setting up configuration
+        smartspim_config["start_plane"] = signal_start
+        smartspim_config["end_plane"] = signal_end
 
         start_date_time = datetime.now()
         detect.main(
@@ -292,7 +335,8 @@ class Segment(ArgSchemaParser):
 
         # save list of all cells
         save_cells(
-            cells=cells, xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
+            cells=cells,
+            xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
         )
 
         # delete tmp folder

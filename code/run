@@ -2,4 +2,4 @@
 set -ex
 
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
-python -u main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yml --input_data /data/"$1"/processed/OMEZarr --input_channel "$2".zarr --input_scale "$3" --chunk_size "$4"
+python -u main.py --config_file /root/capsule/code/src/aind_smartspim_segmentation/smartspim_config.yml --input_data /data/"$1"/processed/stitching/OMEZarr --input_channel "$2".zarr --input_scale "$3" --chunk_size "$4" --signal_start $5 --signal_end $6 --bucket_path "$7"

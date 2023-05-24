@@ -9,7 +9,6 @@ Module for the segmentation of smartspim datasets
 """
 import logging
 import os
-import numpy as np
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -17,13 +16,14 @@ from typing import Union
 
 import dask
 import dask.array as da
-from dask.distributed import Client, LocalCluster, performance_report
 import dask_memusage
+import numpy as np
 import yaml
 from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile
-from argschema.fields import Boolean, Int, Str, List
+from argschema.fields import Boolean, Int, List, Str
 from cellfinder_core.detect import detect
+from dask.distributed import Client, LocalCluster, performance_report
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
 
@@ -31,19 +31,6 @@ from .__init__ import __version__
 from .utils import astro_preprocess, create_folder, generate_processing
 
 PathLike = Union[str, Path]
-dask.config.set(
-    {
-        'temporary_directory': '/scratch'
-    },
-
-    {
-        'tick': {
-            'interval': '20ms',
-            'limit': '30s',
-            'cycle': '1s',
-        },
-    },
-)
 
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
@@ -114,7 +101,10 @@ class SegSchema(ArgSchema):
     )
 
     input_data = Str(
-        metadata={"required": True, "description": "Dataset path where the OMEZarr is located",}
+        metadata={
+            "required": True,
+            "description": "Dataset path where the OMEZarr is located",
+        }
     )
 
     input_channel = Str(metadata={"required": True, "description": "Channel to segment"})
@@ -133,22 +123,76 @@ class SegSchema(ArgSchema):
     )
 
     bkg_subtract = Boolean(
-        metadata={"required": True, "description": "Whether to run background subtraction",},
+        metadata={
+            "required": True,
+            "description": "Whether to run background subtraction",
+        },
         dump_default=False,
     )
 
     subsample = List(
-        metadata = "required": True "description": "Whether to downsample along a particular dimention",},
+        metadata={
+            "required": True,
+            "description": "Whether to downsample along a particular dimention",
+        },
         dump_default=[1, 1, 1],
     )
 
-
     save_path = Str(
-        metadata={"required": True, "description": "Location to save segmentation .xml file",}
+        metadata={
+            "required": True,
+            "description": "Location to save segmentation .xml file",
+        }
     )
 
     metadata_path = Str(
-        metadata={"required": True, "description": "Location to save metadata files",}
+        metadata={
+            "required": True,
+            "description": "Location to save metadata files",
+        }
+    )
+
+    signal_start = Int(
+        metadata={
+            "required": True,
+            "description": "Z index (slice) where we want to start running segmentation on",
+        },
+        dump_default=0,
+    )
+
+    signal_end = Int(
+        metadata={
+            "required": True,
+            "description": "Z index (slice) where we want to end running segmentation on",
+        },
+        dump_default=-1,
+    )
+
+    bucket_path = Str(
+        required=True,
+        metadata={"description": "Amazon Bucket or Google Bucket name"},
+    )
+
+
+def set_up_dask_config(tmp_folder: PathLike):
+    """
+    Sets up dask configuration
+
+    Parameters
+    ----------
+    tmp_folder: PathLike
+        Path to temporary folder
+
+    """
+    dask.config.set(
+        {"temporary_directory": tmp_folder},
+        {
+            "tick": {
+                "interval": "20ms",
+                "limit": "30s",
+                "cycle": "1s",
+            },
+        },
     )
 
 
@@ -179,9 +223,14 @@ class Segment(ArgSchemaParser):
         signal_array = da.from_zarr(image_path)
         return signal_array
 
-    def run(self) -> str:
+    def run(self, results_path_co: PathLike) -> str:
         """
         Runs SmartSPIM Segmentation
+
+        Parameters
+        ----------
+        results_path_co: PathLike
+            Results path in code ocean
 
         Returns
         ----------
@@ -208,7 +257,6 @@ class Segment(ArgSchemaParser):
         )
 
         if not os.path.isdir(str(image_path)):
-
             root_path = Path(self.args["input_data"])
             channels = [folder for folder in os.listdir(root_path) if folder != ".zgroup"]
 
@@ -222,14 +270,26 @@ class Segment(ArgSchemaParser):
             image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
 
         data_processes = []
-        print(image_path)
+
         # load signal data
         start_date_time = datetime.now()
         signal_array = self.__read_zarr_image(image_path)
         end_date_time = datetime.now()
 
         # Loading only 3D data
+        signal_start = self.args["signal_start"]
+        signal_end = self.args["signal_end"]
+        if signal_end == -1:
+            signal_end = signal_array.shape[2]
+
         signal_array = signal_array[0, 0, :, :, :]
+        logger.info(
+            f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
+        )
+
+        # Setting up configuration
+        smartspim_config["start_plane"] = signal_start
+        smartspim_config["end_plane"] = signal_end
 
         data_processes.append(
             DataProcess(
@@ -241,47 +301,46 @@ class Segment(ArgSchemaParser):
                 output_location=str(image_path),
                 code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
                 parameters={},
-                notes="Importing stitched data for cell segmentation",
+                notes="Importing fused data for cell segmentation",
             )
         )
 
         # setup step range for segmentation based on zarr chunking
         steps_z = np.append(
             np.arange(
-                0, 
+                0,
                 signal_array.shape[0],
                 signal_array.chunksize[0],
-            ), 
-            signal_array.shape[0]
+            ),
+            signal_array.shape[0],
         )
 
         holdover = {}
 
         # check if background subtraction will be run
         if self.args["bkg_subtract"]:
-
             logger.info(f"Running background subtraction and segmentation with array {signal_array}")
 
-            #start client
+            # start client
             cluster = LocalCluster(
-            n_workers=16,
-            processes=True,
-            threads_per_worker=1,
-            ) 
+                n_workers=16,
+                processes=True,
+                threads_per_worker=1,
+            )
 
             client = Client(cluster)
 
             for z in range(len(steps_z) - 1):
-
-                dask_report_file = "/results/dask_profile_loop_{0}.html".format(z)
+                dask_report_file = f"{results_path_co}/dask_profile_loop_{z}.html"
 
                 with performance_report(filename=dask_report_file):
+                    bkg_start_date_time = datetime.now()
 
                     bkg_array = da.map_blocks(
                         astro_preprocess,
-                        signal_array[steps_z[z]:steps_z[z+1], :, :],
-                        dtype = signal_array.dtype,
-                        chunks = (
+                        signal_array[steps_z[z] : steps_z[z + 1], :, :],
+                        dtype=signal_array.dtype,
+                        chunks=(
                             signal_array.chunks[0][z],
                             signal_array.chunks[1],
                             signal_array.chunks[2],
@@ -289,9 +348,13 @@ class Segment(ArgSchemaParser):
                     ).compute()
 
                     bkg_array = np.array(bkg_array)
-                    bkg_array = bkg_array[::self.args["subsample"][0],
-                                          ::self.args["subsample"][1],
-                                          ::self.args["subsample"][2]]
+                    bkg_array = bkg_array[
+                        :: self.args["subsample"][0],
+                        :: self.args["subsample"][1],
+                        :: self.args["subsample"][2],
+                    ]
+
+                    bkg_end_date_time = datetime.now()
 
                     holdover = detect.main(
                         signal_array=bkg_array,
@@ -302,18 +365,33 @@ class Segment(ArgSchemaParser):
                         **smartspim_config,
                     )
 
+                    cell_end_date_time = datetime.now()
+
                     del bkg_array
 
-            print("Background subtraction completed. Closing dask client.")
+            logger.info("Background subtraction completed. Closing dask client.")
+            client.close()
 
-            end_date_time = datetime.now()
+            data_processes.append(
+                DataProcess(
+                    name="Image background subtraction",
+                    version=__version__,
+                    start_date_time=bkg_start_date_time,
+                    end_date_time=bkg_end_date_time,
+                    input_location=str(image_path),
+                    output_location="In memory array",
+                    code_url="https://github.com/astropy/astropy.github.com",
+                    parameters=smartspim_config,
+                    notes="Background subtraction",
+                )
+            )
 
             data_processes.append(
                 DataProcess(
                     name="Image cell segmentation",
                     version=__version__,
-                    start_date_time=start_date_time,
-                    end_date_time=end_date_time,
+                    start_date_time=bkg_end_date_time,
+                    end_date_time=cell_end_date_time,
                     input_location=str(image_path),
                     output_location="In memory array",
                     code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/bkg_sub",
@@ -324,13 +402,14 @@ class Segment(ArgSchemaParser):
         else:
             logger.info(f"Running segmentation with array {signal_array}")
             start_date_time = datetime.now()
-        
-            for z in range(len(steps_z) - 1):
 
-                bkg_array = np.array(signal_array[steps_z[z]:steps_z[z+1], :, :])
-                bkg_array = bkg_array[::self.args["subsample"][0],
-                                      ::self.args["subsample"][1],
-                                      ::self.args["subsample"][2]]
+            for z in range(len(steps_z) - 1):
+                bkg_array = np.array(signal_array[steps_z[z] : steps_z[z + 1], :, :])
+                bkg_array = bkg_array[
+                    :: self.args["subsample"][0],
+                    :: self.args["subsample"][1],
+                    :: self.args["subsample"][2],
+                ]
 
                 holdover = detect.main(
                     signal_array=bkg_array,
@@ -347,7 +426,7 @@ class Segment(ArgSchemaParser):
 
             data_processes.append(
                 DataProcess(
-                    name="Image cell segmentation",  # Cell segmentation
+                    name="Image cell segmentation",
                     version=__version__,
                     start_date_time=start_date_time,
                     end_date_time=end_date_time,
@@ -384,22 +463,27 @@ class Segment(ArgSchemaParser):
 
         # save list of all cells
         save_cells(
-            cells=cells, xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
+            cells=cells,
+            xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
         )
+
 
 def main():
     """
     Main function
     """
+    results_path = os.path.abspath("../results/")
     default_params = {
         "bkg_subtract": False,
         "subsample": [1, 1, 1],
-        "save_path": "/results/",
-        "metadata_path": "/results/metadata",
+        "save_path": results_path,
+        "metadata_path": f"{results_path}/metadata",
     }
 
+    set_up_dask_config(os.path.abspath("../scratch/"))
+
     seg = Segment(default_params)
-    image_path = seg.run()
+    image_path = seg.run(results_path)
     seg.merge()
 
     return image_path

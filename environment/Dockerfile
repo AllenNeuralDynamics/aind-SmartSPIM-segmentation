@@ -7,7 +7,8 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    dask==2023.2.0 \
+    bokeh==2.4.2 \
+    dask[distributed]==2022.11.1 \
     argschema==3.0.4 \
     natsort==8.2.0 \
     astropy==5.2.1 \
@@ -15,6 +16,6 @@ RUN pip install -U --no-cache-dir \
     imlib==0.1.3 \
     zarr==2.13.6 \
     aind-data-schema==0.12.5 \
-    git+https://github.com/camilolaiton/cellfinder-core.git@feature/lazy_reader
+    git+https://github.com/camilolaiton/cellfinder-core.git@feature/bkg_sub
 
 RUN conda install -c conda-forge awscli

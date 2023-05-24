@@ -16,7 +16,6 @@ from typing import Union
 
 import dask
 import dask.array as da
-import dask_memusage
 import numpy as np
 import yaml
 from aind_data_schema.processing import DataProcess
@@ -131,10 +130,12 @@ class SegSchema(ArgSchema):
     )
 
     subsample = List(
+        Int(),
         metadata={
             "required": True,
             "description": "Whether to downsample along a particular dimention",
         },
+        cli_as_single_argument=True,
         dump_default=[1, 1, 1],
     )
 

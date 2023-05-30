@@ -12,14 +12,17 @@ import os
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
+import dask
 import dask.array as da
+import numpy as np
 import yaml
 from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile
-from argschema.fields import Boolean, Int, Str
+from argschema.fields import Boolean, Int, List, Str
 from cellfinder_core.detect import detect
+from dask.distributed import Client, LocalCluster, performance_report
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
 
@@ -49,7 +52,7 @@ def get_smartspim_default_config() -> dict:
         "start_plane": 0,
         "end_plane": 0,
         "n_free_cpus": 2,
-        "voxel_sizes": [2, 1.8, 1.8],  # in microns
+        "voxel_sizes": [4, 1.8, 1.8],  # in microns
         "soma_diameter": 9,  # in microns
         "ball_xy_size": 8,
         "ball_overlap_fraction": 0.6,
@@ -115,7 +118,7 @@ class SegSchema(ArgSchema):
             (needed to prevent memory crashes)
             """,
         },
-        dump_default=500,
+        dump_default=250,
     )
 
     bkg_subtract = Boolean(
@@ -124,6 +127,16 @@ class SegSchema(ArgSchema):
             "description": "Whether to run background subtraction",
         },
         dump_default=False,
+    )
+
+    subsample = List(
+        Int(),
+        metadata={
+            "required": True,
+            "description": "Whether to downsample along a particular dimention",
+        },
+        cli_as_single_argument=True,
+        dump_default=[1, 1, 1],
     )
 
     save_path = Str(
@@ -162,6 +175,28 @@ class SegSchema(ArgSchema):
     )
 
 
+def set_up_dask_config(tmp_folder: PathLike):
+    """
+    Sets up dask configuration
+
+    Parameters
+    ----------
+    tmp_folder: PathLike
+        Path to temporary folder
+
+    """
+    dask.config.set(
+        {"temporary_directory": tmp_folder},
+        {
+            "tick": {
+                "interval": "20ms",
+                "limit": "30s",
+                "cycle": "1s",
+            },
+        },
+    )
+
+
 class Segment(ArgSchemaParser):
 
     """
@@ -189,9 +224,14 @@ class Segment(ArgSchemaParser):
         signal_array = da.from_zarr(image_path)
         return signal_array
 
-    def run(self) -> str:
+    def run(self, results_path_co: PathLike) -> str:
         """
         Runs SmartSPIM Segmentation
+
+        Parameters
+        ----------
+        results_path_co: PathLike
+            Results path in code ocean
 
         Returns
         ----------
@@ -237,41 +277,6 @@ class Segment(ArgSchemaParser):
         signal_array = self.__read_zarr_image(image_path)
         end_date_time = datetime.now()
 
-        data_processes.append(
-            DataProcess(
-                name="Image importing",
-                version=__version__,
-                start_date_time=start_date_time,
-                end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location=str(image_path),
-                code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-                parameters={},
-                notes="Importing stitched data for cell segmentation",
-            )
-        )
-
-        # check if background sublations will be run
-        if self.args["bkg_subtract"]:
-            logger.info("Starting background substraction")
-            start_date_time = datetime.now()
-            signal_array = astro_preprocess(signal_array, "MMMBackground")
-            end_date_time = datetime.now()
-
-            data_processes.append(
-                DataProcess(
-                    name="Image background subtraction",  # Cell segmentation
-                    version=__version__,
-                    start_date_time=start_date_time,
-                    end_date_time=end_date_time,
-                    input_location=str(image_path),
-                    output_location="In memory array",
-                    code_url="https://github.com/astropy/astropy.github.com",
-                    parameters=smartspim_config,
-                    notes="Background subtraction",
-                )
-            )
-
         # Loading only 3D data
         signal_start = self.args["signal_start"]
         signal_end = self.args["signal_end"]
@@ -287,28 +292,153 @@ class Segment(ArgSchemaParser):
         smartspim_config["start_plane"] = signal_start
         smartspim_config["end_plane"] = signal_end
 
-        start_date_time = datetime.now()
-        detect.main(
-            signal_array=signal_array,
-            save_path=self.args["metadata_path"],
-            chunk_size=self.args["chunk_size"],
-            **smartspim_config,
-        )
-        end_date_time = datetime.now()
-
         data_processes.append(
             DataProcess(
-                name="Image cell segmentation",  # Cell segmentation
+                name="Image importing",
                 version=__version__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
                 input_location=str(image_path),
-                output_location=str(self.args["metadata_path"]),
-                code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/lazy_reader",
-                parameters=smartspim_config,
-                notes="Cell segmentation with XML outputs",
+                output_location=str(image_path),
+                code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
+                parameters={},
+                notes="Importing fused data for cell segmentation",
             )
         )
+
+        # setup step range for segmentation based on zarr chunking
+        steps_z = np.append(
+            np.arange(
+                0,
+                signal_array.shape[0],
+                self.args["chunk_size"],
+            ),
+            signal_array.shape[0],
+        )
+
+        holdover = {}
+
+        # check if background subtraction will be run
+        if self.args["bkg_subtract"]:
+            logger.info(f"Running background subtraction and segmentation with array {signal_array}")
+
+            # start client
+            cluster = LocalCluster(
+                n_workers=16,
+                processes=True,
+                threads_per_worker=1,
+            )
+
+            client = Client(cluster)
+
+            for z in range(len(steps_z) - 1):
+                dask_report_file = f"{results_path_co}/dask_profile_loop_{z}.html"
+
+                with performance_report(filename=dask_report_file):
+                    bkg_start_date_time = datetime.now()
+
+                    bkg_array = da.map_blocks(
+                        astro_preprocess,
+                        signal_array[steps_z[z] : steps_z[z + 1], :, :],
+                        "MMMBackground",
+                        dtype=signal_array.dtype,
+                        chunks=(
+                            signal_array.chunks[0][z],
+                            signal_array.chunks[1],
+                            signal_array.chunks[2],
+                        ),
+                    ).compute()
+
+                    bkg_array = np.array(bkg_array)
+                    bkg_array = bkg_array[
+                        :: self.args["subsample"][0],
+                        :: self.args["subsample"][1],
+                        :: self.args["subsample"][2],
+                    ]
+
+                    bkg_end_date_time = datetime.now()
+
+                    holdover = detect.main(
+                        signal_array=bkg_array,
+                        save_path=self.args["metadata_path"],
+                        chunk_size=self.args["chunk_size"],
+                        block=z,
+                        holdover=holdover,
+                        **smartspim_config,
+                    )
+
+                    cell_end_date_time = datetime.now()
+
+                    del bkg_array
+
+            logger.info("Background subtraction completed. Closing dask client.")
+            client.close()
+
+            data_processes.append(
+                DataProcess(
+                    name="Image background subtraction",
+                    version=__version__,
+                    start_date_time=bkg_start_date_time,
+                    end_date_time=bkg_end_date_time,
+                    input_location=str(image_path),
+                    output_location="In memory array",
+                    code_url="https://github.com/astropy/astropy.github.com",
+                    parameters=smartspim_config,
+                    notes="Background subtraction",
+                )
+            )
+
+            data_processes.append(
+                DataProcess(
+                    name="Image cell segmentation",
+                    version=__version__,
+                    start_date_time=bkg_end_date_time,
+                    end_date_time=cell_end_date_time,
+                    input_location=str(image_path),
+                    output_location="In memory array",
+                    code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/bkg_sub",
+                    parameters=smartspim_config,
+                    notes="Calculated using background subtraction",
+                )
+            )
+        else:
+            logger.info(f"Running segmentation with array {signal_array}")
+            start_date_time = datetime.now()
+
+            for z in range(len(steps_z) - 1):
+                bkg_array = np.array(signal_array[steps_z[z] : steps_z[z + 1], :, :])
+                bkg_array = bkg_array[
+                    :: self.args["subsample"][0],
+                    :: self.args["subsample"][1],
+                    :: self.args["subsample"][2],
+                ]
+
+                holdover = detect.main(
+                    signal_array=bkg_array,
+                    save_path=self.args["metadata_path"],
+                    chunk_size=self.args["chunk_size"],
+                    block=z,
+                    holdover=holdover,
+                    **smartspim_config,
+                )
+
+                del bkg_array
+
+            end_date_time = datetime.now()
+
+            data_processes.append(
+                DataProcess(
+                    name="Image cell segmentation",
+                    version=__version__,
+                    start_date_time=start_date_time,
+                    end_date_time=end_date_time,
+                    input_location=str(image_path),
+                    output_location=str(self.args["metadata_path"]),
+                    code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/lazy_reader",
+                    parameters=smartspim_config,
+                    notes="Cell segmentation with XML outputs",
+                )
+            )
 
         processing_path = Path(self.args["metadata_path"]).joinpath("processing.json")
 
@@ -339,27 +469,23 @@ class Segment(ArgSchemaParser):
             xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
         )
 
-        # delete tmp folder
-        # try:
-        #     shutil.rmtree(self.args["metadata_path"])
-        # except OSError as e:
-        #     logger.error(
-        #         f"Error removing temp file {self.args["metadata_path"]} : {e.strerror}"
-        #     )
-
 
 def main():
     """
     Main function
     """
+    results_path = os.path.abspath("../results/")
     default_params = {
-        "bkg_subtract": False,
-        "save_path": "/results/",
-        "metadata_path": "/results/metadata",
+        "bkg_subtract": True,
+        "subsample": [1, 1, 1],
+        "save_path": results_path,
+        "metadata_path": f"{results_path}/metadata",
     }
 
+    set_up_dask_config(os.path.abspath("../scratch/"))
+
     seg = Segment(default_params)
-    image_path = seg.run()
+    image_path = seg.run(results_path)
     seg.merge()
 
     return image_path

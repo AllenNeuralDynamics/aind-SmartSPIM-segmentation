@@ -3,6 +3,9 @@ Main file to execute the smartspim segmentation
 in code ocean
 """
 
+import cProfile
+import os
+import pstats
 import subprocess
 import sys
 
@@ -65,28 +68,31 @@ def main():
     Main function to execute the smartspim segmentation
     in code ocean
     """
+
+    results_folder = os.path.abspath("../results")
+    profiler = cProfile.Profile()
+    profiler.enable()
     image_path = segmentation.main()
-    bucket_path = sys.argv[-1]
+    profiler.disable()
+    stats = pstats.Stats(profiler)
+    stats.dump_stats(f"{results_folder}/segmentation_stats.stats")
+    profiler.dump_stats(f"{results_folder}/segmentation_profile.prof")
 
-    output_folder = "/results"
+    bucket_path = "aind-open-data"
 
-    if len(bucket_path):
-        dataset_folder = str(sys.argv[4]).split("/")[2]
-        channel_name = image_path.split("/")[-2].replace(".zarr", "")
+    dataset_folder = str(sys.argv[4]).split("/")[2]
+    channel_name = image_path.split("/")[-2].replace(".zarr", "")
 
-        dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
-        s3_path = f"s3://{bucket_path}/{dataset_name}"
+    dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
+    s3_path = f"s3://{bucket_path}/{dataset_name}"
 
-        for out in execute_command_helper(f"aws s3 mv --recursive {output_folder} {s3_path}"):
-            print(out)
+    # for out in execute_command_helper(f"aws s3 mv --recursive {results_folder} {s3_path}"):
+    #    print(out)
 
-        save_string_to_txt(
-            f"Results of cell segmentation saved in: {s3_path}",
-            "/root/capsule/results/output_segmentation.txt",
-        )
-
-    else:
-        print("No bucket path provided, avoiding manual copy")
+    save_string_to_txt(
+        f"Results of cell segmentation saved in: {s3_path}",
+        f"{results_folder}/output_segmentation.txt",
+    )
 
 
 if __name__ == "__main__":

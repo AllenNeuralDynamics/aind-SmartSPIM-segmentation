@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from typing import List, Optional, Union
 
+import dask.array as da
 import numpy as np
 from aind_data_schema import Processing
 from astropy.stats import SigmaClip
@@ -21,7 +22,9 @@ from .pymusica import musica
 PathLike = Union[str, Path]
 
 
-def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=0, smooth=False):
+def astro_preprocess(
+    img, estimator="MMMBackground", box=(50, 50), filt=(3, 3), sig_clip=3, pad=0, smooth=False
+):
     """
     Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
     for contrast enhancement and statistical background subtraction
@@ -49,17 +52,17 @@ def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=
         dask array with preprocessed images
 
     """
+    # convert dask array array
+    img = np.array(img).astype("uint16")
 
     # get estimator function for background subtraction
     est = getattr(importlib.import_module("photutils.background"), estimator)
 
     # set parameters for Laplacian pyramid
-    L = 7
+    L = 5
     params_m = {"M": 1023.0, "a": np.full(L, 11), "p": 0.7}
-
-    # loop through z plane and run preprocessing
     for depth in range(img.shape[0]):
-        curr_img = np.array(img[depth, :, :])
+        curr_img = img[depth, :, :].copy()
         sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
 
         # check if padding has been added and mask regions accordingly
@@ -104,6 +107,8 @@ def astro_preprocess(img, estimator, box=(50, 50), filt=(3, 3), sig_clip=3, pad=
         curr_img = np.where(curr_img < 0, 0, curr_img)
 
         img[depth, :, :] = curr_img.astype("uint16")
+
+        del curr_img, bkg
 
     # smooth over Z plan with gaussian filter
     if smooth:

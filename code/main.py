@@ -86,8 +86,8 @@ def main():
     dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
     s3_path = f"s3://{bucket_path}/{dataset_name}"
 
-    for out in execute_command_helper(f"aws s3 mv --recursive {results_folder} {s3_path}"):
-        print(out)
+    # for out in execute_command_helper(f"aws s3 mv --recursive {results_folder} {s3_path}"):
+    #    print(out)
 
     save_string_to_txt(
         f"Results of cell segmentation saved in: {s3_path}",

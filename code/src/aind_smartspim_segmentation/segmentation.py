@@ -311,7 +311,7 @@ class Segment(ArgSchemaParser):
             np.arange(
                 0,
                 signal_array.shape[0],
-                signal_array.chunksize[0],
+                self.args["chunk_size"],
             ),
             signal_array.shape[0],
         )
@@ -340,6 +340,7 @@ class Segment(ArgSchemaParser):
                     bkg_array = da.map_blocks(
                         astro_preprocess,
                         signal_array[steps_z[z] : steps_z[z + 1], :, :],
+                        "MMMBackground",
                         dtype=signal_array.dtype,
                         chunks=(
                             signal_array.chunks[0][z],
@@ -475,7 +476,7 @@ def main():
     """
     results_path = os.path.abspath("../results/")
     default_params = {
-        "bkg_subtract": False,
+        "bkg_subtract": True,
         "subsample": [1, 1, 1],
         "save_path": results_path,
         "metadata_path": f"{results_path}/metadata",

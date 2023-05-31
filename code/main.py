@@ -3,13 +3,26 @@ Main file to execute the smartspim segmentation
 in code ocean
 """
 
-import cProfile
+import json
+import logging
 import os
-import pstats
 import subprocess
-import sys
+from glob import glob
 
 from src.aind_smartspim_segmentation import segmentation
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s : %(message)s",
+    datefmt="%Y-%m-%d %H:%M",
+    handlers=[
+        logging.StreamHandler(),
+        # logging.FileHandler("test.log", "a"),
+    ],
+)
+logging.disable("DEBUG")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def save_string_to_txt(txt: str, filepath: str, mode="w") -> None:
@@ -63,36 +76,49 @@ def execute_command_helper(command: str, print_command: bool = False) -> None:
         raise subprocess.CalledProcessError(return_code, command)
 
 
+def read_json_as_dict(filepath: str) -> dict:
+    """
+    Reads a json as dictionary.
+
+    Parameters
+    ------------------------
+
+    filepath: PathLike
+        Path where the json is located.
+
+    Returns
+    ------------------------
+
+    dict:
+        Dictionary with the data the json has.
+
+    """
+
+    dictionary = {}
+
+    if os.path.exists(filepath):
+        with open(filepath) as json_file:
+            dictionary = json.load(json_file)
+
+    return dictionary
+
+
 def main():
     """
     Main function to execute the smartspim segmentation
     in code ocean
     """
 
-    results_folder = os.path.abspath("../results")
-    profiler = cProfile.Profile()
-    profiler.enable()
-    image_path = segmentation.main()
-    profiler.disable()
-    stats = pstats.Stats(profiler)
-    stats.dump_stats(f"{results_folder}/segmentation_stats.stats")
-    profiler.dump_stats(f"{results_folder}/segmentation_profile.prof")
+    data_folder = os.path.abspath("../data/")
+    processing_manifest_path = glob(f"{data_folder}/processing_manifest_*")[0]
 
-    bucket_path = "aind-open-data"
+    if not os.path.exists(processing_manifest_path):
+        raise ValueError("Processing manifest path does not exist!")
 
-    dataset_folder = str(sys.argv[4]).split("/")[2]
-    channel_name = image_path.split("/")[-2].replace(".zarr", "")
+    pipeline_config = read_json_as_dict(processing_manifest_path)
+    logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
 
-    dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
-    s3_path = f"s3://{bucket_path}/{dataset_name}"
-
-    # for out in execute_command_helper(f"aws s3 mv --recursive {results_folder} {s3_path}"):
-    #    print(out)
-
-    save_string_to_txt(
-        f"Results of cell segmentation saved in: {s3_path}",
-        f"{results_folder}/output_segmentation.txt",
-    )
+    image_path = segmentation.main(pipeline_config)
 
 
 if __name__ == "__main__":

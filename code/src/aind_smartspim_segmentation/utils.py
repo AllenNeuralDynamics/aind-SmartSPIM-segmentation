@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 from typing import List, Optional, Union
 
-import dask.array as da
 import numpy as np
 from aind_data_schema import Processing
 from astropy.stats import SigmaClip
@@ -62,6 +61,7 @@ def astro_preprocess(
     L = 5
     params_m = {"M": 1023.0, "a": np.full(L, 11), "p": 0.7}
     for depth in range(img.shape[0]):
+
         curr_img = img[depth, :, :].copy()
         sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
 

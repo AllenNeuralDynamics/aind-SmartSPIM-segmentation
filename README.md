@@ -1,5 +1,7 @@
 # aind-smartspim-segmentation
 
+This version is compatible with the pipeline feature in Code Ocean.
+
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)

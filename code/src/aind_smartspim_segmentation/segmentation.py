@@ -278,13 +278,24 @@ class Segment(ArgSchemaParser):
         signal_array = self.__read_zarr_image(image_path)
         end_date_time = datetime.now()
 
+        # setup step range for segmentation based on zarr chunking
+        # Setting to -3 since it's TCZYX
+        z_chunk = signal_array.chunksize[-3]
+        chunk_step = 250
+        if z_chunk % 64 == 0:
+            chunk_step = 256
+        elif z_chunk == 1 or z_chunk == 250:
+            chunk_step = 250
+
+        logger.info(f"z-plane chunk size: {z_chunk}. Processing with chunk size: {chunk_step}.")
+
         # Loading only 3D data
         signal_start = self.args["signal_start"]
         signal_end = self.args["signal_end"]
         if signal_end == -1:
-            signal_end = signal_array.shape[2]
+            signal_end = signal_array.shape[3]
 
-        signal_array = signal_array[0, 0, :, :, :]
+        signal_array = np.swapaxis(signal_array[0, 0, :, :, :], 0, 1)
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )
@@ -312,14 +323,14 @@ class Segment(ArgSchemaParser):
             np.arange(
                 0,
                 signal_array.shape[0],
-                self.args["chunk_size"],
+                chunk_step,
             ),
             signal_array.shape[0],
         )
 
         holdover = {}
 
-        # check if background subtraction will be run
+        # check if background subtraction will be executed
         if self.args["bkg_subtract"]:
             logger.info(f"Running background subtraction and segmentation with array {signal_array}")
 
@@ -362,7 +373,7 @@ class Segment(ArgSchemaParser):
                     holdover = detect.main(
                         signal_array=bkg_array,
                         save_path=self.args["metadata_path"],
-                        chunk_size=self.args["chunk_size"],
+                        chunk_size=chunk_step,
                         block=z,
                         holdover=holdover,
                         **smartspim_config,
@@ -417,7 +428,7 @@ class Segment(ArgSchemaParser):
                 holdover = detect.main(
                     signal_array=bkg_array,
                     save_path=self.args["metadata_path"],
-                    chunk_size=self.args["chunk_size"],
+                    chunk_size=chunk_step,
                     block=z,
                     holdover=holdover,
                     **smartspim_config,

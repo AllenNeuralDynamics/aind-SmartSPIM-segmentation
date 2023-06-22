@@ -55,7 +55,7 @@ def get_smartspim_default_config() -> dict:
         "start_plane": 0,
         "end_plane": 0,
         "n_free_cpus": 2,
-        "voxel_sizes": [4, 1.8, 1.8],  # in microns
+        "voxel_sizes": [2, 1.8, 1.8],  # in microns
         "soma_diameter": 9,  # in microns
         "ball_xy_size": 8,
         "ball_overlap_fraction": 0.6,
@@ -280,13 +280,24 @@ class Segment(ArgSchemaParser):
         signal_array = self.__read_zarr_image(image_path)
         end_date_time = datetime.now()
 
+        # setup step range for segmentation based on zarr chunking
+        # Setting to -3 since it's TCZYX
+        z_chunk = signal_array.chunksize[-3]
+        chunk_step = 250
+        if z_chunk % 64 == 0:
+            chunk_step = 256
+        elif z_chunk == 1 or z_chunk == 250:
+            chunk_step = 250
+
+        logger.info(f"z-plane chunk size: {z_chunk}. Processing with chunk size: {chunk_step}.")
+
         # Loading only 3D data
         signal_start = self.args["signal_start"]
         signal_end = self.args["signal_end"]
         if signal_end == -1:
-            signal_end = signal_array.shape[2]
+            signal_end = signal_array.shape[3]
 
-        signal_array = signal_array[0, 0, :, :, :]
+        signal_array = np.swapaxis(signal_array[0, 0, :, :, :], 0, 1)
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )
@@ -309,12 +320,11 @@ class Segment(ArgSchemaParser):
             )
         )
 
-        # setup step range for segmentation based on zarr chunking
         steps_z = np.append(
             np.arange(
                 0,
                 signal_array.shape[0],
-                self.args["chunk_size"],
+                chunk_step,
             ),
             signal_array.shape[0],
         )
@@ -364,7 +374,7 @@ class Segment(ArgSchemaParser):
                     holdover = detect.main(
                         signal_array=bkg_array,
                         save_path=self.args["metadata_path"],
-                        chunk_size=self.args["chunk_size"],
+                        chunk_size=chunk_step,
                         block=z,
                         holdover=holdover,
                         **smartspim_config,
@@ -419,7 +429,7 @@ class Segment(ArgSchemaParser):
                 holdover = detect.main(
                     signal_array=bkg_array,
                     save_path=self.args["metadata_path"],
-                    chunk_size=self.args["chunk_size"],
+                    chunk_size=chunk_step,
                     block=z,
                     holdover=holdover,
                     **smartspim_config,
@@ -586,14 +596,15 @@ def main():
     """
     Main function
     """
+
     results_path = os.path.abspath("../results/")
+
     default_params = {
         "bkg_subtract": True,
         "subsample": [1, 1, 1],
         "save_path": results_path,
         "metadata_path": f"{results_path}/metadata",
     }
-
     set_up_dask_config(os.path.abspath("../scratch/"))
 
     seg = Segment(default_params)

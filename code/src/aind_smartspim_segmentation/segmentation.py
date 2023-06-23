@@ -579,11 +579,11 @@ def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output
         channel_name = dataset_name[4].replace(".zarr", "")
         json_state[
             "ng_link"
-        ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/processed/Cell_Segmentation/{channel_name}/visualization/neuroglancer_config.json"
+        ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
 
         json_state["layers"][1][
             "source"
-        ] = f"precomputed://s3://{bucket_path}/{dataset_name[0]}/processed/Cell_Segmentation/{channel_name}/visualization/precomputed"
+        ] = f"precomputed://s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/precomputed"
 
         logger.info(f"Visualization link: {json_state['ng_link']}")
         output_path = os.path.join(output, json_name)

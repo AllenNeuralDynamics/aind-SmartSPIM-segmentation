@@ -83,7 +83,7 @@ def main():
     dataset_folder = str(sys.argv[4]).split("/")[2]
     channel_name = image_path.split("/")[-2].replace(".zarr", "")
 
-    dataset_name = dataset_folder + f"/processed/Cell_Segmentation/{channel_name}"
+    dataset_name = dataset_folder + f"/image_cell_segmentation/{channel_name}"
     s3_path = f"s3://{bucket_path}/{dataset_name}"
 
     # for out in execute_command_helper(f"aws s3 mv --recursive {results_folder} {s3_path}"):

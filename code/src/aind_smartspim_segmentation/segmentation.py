@@ -295,7 +295,7 @@ class Segment(ArgSchemaParser):
         if signal_end == -1:
             signal_end = signal_array.shape[3]
 
-        signal_array = np.swapaxes(signal_array[0, 0, :, :, :], 0, 1)
+        # signal_array = np.swapaxes(signal_array[0, 0, :, :, :], 0, 1)
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )

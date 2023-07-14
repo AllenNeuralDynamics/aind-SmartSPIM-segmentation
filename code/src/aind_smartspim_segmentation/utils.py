@@ -89,7 +89,7 @@ def astro_preprocess(
 
         else:
             # calculate Laplacian Pyramid
-            curr_img = musica(curr_img, L, params_m)
+            # curr_img = musica(curr_img, L, params_m)
 
             # get background statistics
             bkg = Background2D(
@@ -118,9 +118,7 @@ def astro_preprocess(
 
 
 def generate_processing(
-    data_processes: List[dict],
-    dest_processing: PathLike,
-    pipeline_version: str,
+    data_processes: List[dict], dest_processing: PathLike, pipeline_version: str,
 ) -> None:
     """
     Generates data description for the output folder.

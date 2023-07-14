@@ -103,10 +103,7 @@ class SegSchema(ArgSchema):
     )
 
     input_data = Str(
-        metadata={
-            "required": True,
-            "description": "Dataset path where the OMEZarr is located",
-        }
+        metadata={"required": True, "description": "Dataset path where the OMEZarr is located",}
     )
 
     input_channel = Str(metadata={"required": True, "description": "Channel to segment"})
@@ -125,10 +122,7 @@ class SegSchema(ArgSchema):
     )
 
     bkg_subtract = Boolean(
-        metadata={
-            "required": True,
-            "description": "Whether to run background subtraction",
-        },
+        metadata={"required": True, "description": "Whether to run background subtraction",},
         dump_default=False,
     )
 
@@ -143,17 +137,11 @@ class SegSchema(ArgSchema):
     )
 
     save_path = Str(
-        metadata={
-            "required": True,
-            "description": "Location to save segmentation .xml file",
-        }
+        metadata={"required": True, "description": "Location to save segmentation .xml file",}
     )
 
     metadata_path = Str(
-        metadata={
-            "required": True,
-            "description": "Location to save metadata files",
-        }
+        metadata={"required": True, "description": "Location to save metadata files",}
     )
 
     signal_start = Int(
@@ -185,13 +173,7 @@ def set_up_dask_config(tmp_folder: PathLike):
     """
     dask.config.set(
         {"temporary_directory": tmp_folder},
-        {
-            "tick": {
-                "interval": "20ms",
-                "limit": "30s",
-                "cycle": "1s",
-            },
-        },
+        {"tick": {"interval": "20ms", "limit": "30s", "cycle": "1s",},},
     )
 
 
@@ -293,9 +275,9 @@ class Segment(ArgSchemaParser):
         signal_start = self.args["signal_start"]
         signal_end = self.args["signal_end"]
         if signal_end == -1:
-            signal_end = signal_array.shape[3]
+            signal_end = signal_array.shape[-3]
 
-        # signal_array = np.swapaxes(signal_array[0, 0, :, :, :], 0, 1)
+        signal_array = signal_array[0, 0, :, :, :]
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )
@@ -319,14 +301,7 @@ class Segment(ArgSchemaParser):
         )
 
         # setup step range for segmentation based on zarr chunking
-        steps_z = np.append(
-            np.arange(
-                0,
-                signal_array.shape[0],
-                chunk_step,
-            ),
-            signal_array.shape[0],
-        )
+        steps_z = np.append(np.arange(0, signal_array.shape[0], chunk_step,), signal_array.shape[0],)
 
         holdover = {}
 
@@ -335,11 +310,7 @@ class Segment(ArgSchemaParser):
             logger.info(f"Running background subtraction and segmentation with array {signal_array}")
 
             # start client
-            cluster = LocalCluster(
-                n_workers=16,
-                processes=True,
-                threads_per_worker=1,
-            )
+            cluster = LocalCluster(n_workers=16, processes=True, threads_per_worker=1,)
 
             client = Client(cluster)
 
@@ -477,8 +448,7 @@ class Segment(ArgSchemaParser):
 
         # save list of all cells
         save_cells(
-            cells=cells,
-            xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
+            cells=cells, xml_file_path=os.path.join(self.args["save_path"], "detected_cells.xml"),
         )
 
 

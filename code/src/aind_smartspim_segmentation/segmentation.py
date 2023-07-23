@@ -573,8 +573,8 @@ def main(input_config: dict):
         "signal_end": input_config["segmentation"]["signal_end"],
         "bkg_subtract": True,
         "subsample": [1, 1, 1],
-        "save_path": results_path,
-        "metadata_path": f"{results_path}/metadata",
+        "save_path": f"{results_path}/cell_{input_config['segmentation']['channel']}",
+        "metadata_path": f"{results_path}/cell_{input_config['segmentation']['channel']}/metadata",
     }
 
     logger.info(f"Cell segmentation parameters: {default_params}")

@@ -24,6 +24,19 @@ logging.disable("DEBUG")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s : %(message)s",
+    datefmt="%Y-%m-%d %H:%M",
+    handlers=[
+        logging.StreamHandler(),
+        # logging.FileHandler("test.log", "a"),
+    ],
+)
+logging.disable("DEBUG")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 def save_string_to_txt(txt: str, filepath: str, mode="w") -> None:
     """
@@ -119,7 +132,6 @@ def main():
     logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
 
     image_path = block_segmentation.main(pipeline_config)
-
 
 if __name__ == "__main__":
     main()

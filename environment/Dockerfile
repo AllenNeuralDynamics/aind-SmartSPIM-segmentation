@@ -26,4 +26,5 @@ RUN pip install -U --no-cache-dir \
     jupyter-server-proxy==3.2.2 \
     git+https://github.com/camilolaiton/cellfinder-core.git@block_seg
 
+
 RUN conda install -c conda-forge awscli 

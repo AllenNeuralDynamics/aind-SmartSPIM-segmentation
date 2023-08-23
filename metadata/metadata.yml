@@ -1,5 +1,5 @@
 metadata_version: 1
-name: Copy of Pipeline Version - SmartSPIM Cell Segmentation Capsule
+name: Pipeline Version - SmartSPIM Cell Segmentation Capsule
 description: A tool for automated segmentation of Cells or Nuclei from wholebrain
   lightsheet image volumes
 tags:

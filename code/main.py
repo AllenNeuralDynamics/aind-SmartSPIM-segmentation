@@ -9,7 +9,20 @@ import os
 import subprocess
 from glob import glob
 
-from src.aind_smartspim_segmentation import segmentation
+from src.aind_smartspim_segmentation import block_segmentation
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s : %(message)s",
+    datefmt="%Y-%m-%d %H:%M",
+    handlers=[
+        logging.StreamHandler(),
+        # logging.FileHandler("test.log", "a"),
+    ],
+)
+logging.disable("DEBUG")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -118,8 +131,7 @@ def main():
     pipeline_config = read_json_as_dict(processing_manifest_path)
     logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
 
-    image_path = segmentation.main(pipeline_config)
-
+    image_path = block_segmentation.main(pipeline_config)
 
 if __name__ == "__main__":
     main()

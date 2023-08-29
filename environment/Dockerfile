@@ -22,8 +22,9 @@ RUN pip install -U --no-cache-dir \
     imlib==0.1.3 \
     zarr==2.13.6 \
     aind-data-schema==0.12.5 \
-    jupyter-server-proxy==3.2.2 \
     aind-ng-link==1.0.6 \
-    git+https://github.com/camilolaiton/cellfinder-core.git@feature/bkg_sub
+    jupyter-server-proxy==3.2.2 \
+    git+https://github.com/camilolaiton/cellfinder-core.git@block_seg
+
 
 RUN conda install -c conda-forge awscli 

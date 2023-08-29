@@ -145,8 +145,7 @@ def delay_preprocess(img, reflect, pad, subtract = False, bkg = None):
 
     img = np.pad(img, reflect, mode = "reflect")
     img = np.pad(img, pad, mode = "constant", constant_values = 0)
-
-    print(img.shape)
+    
     return img
 
 @dask.delayed

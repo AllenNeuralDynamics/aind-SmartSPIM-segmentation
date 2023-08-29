@@ -59,9 +59,6 @@ def delay_astro(img, estimator="MedianBackground", box=(50, 50), filt=(3, 3), si
 
     """
 
-    #convert dask array array
-    img = np.array(img).astype("uint16")
-
     if reflect != 0:
         img = np.pad(img, reflect, mode = "reflect")
         
@@ -221,7 +218,6 @@ def delay_plane_stats(plane, log_sigma_size, soma_diameter, count):
 @dask.delayed
 def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, count, smartspim_config):
     
-    img = np.asarray(img)
     img = np.pad(img, reflect, mode = "reflect")
     img = np.pad(img, pad, mode = "constant", constant_values = 0)
 

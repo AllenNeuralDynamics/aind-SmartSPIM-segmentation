@@ -31,39 +31,13 @@ from .block_utils import delay_astro, create_folder, generate_processing, delay_
 
 PathLike = Union[str, Path]
 
-scatch_folder = os.path.abspath('../scratch')
-dask.config.set(
-    {
-        "temporary-directory": scatch_folder,
-        "local_directory": scatch_folder,
-        "tcp-timeout": "300s",
-        "array.chunk-size": "384MiB",
-        "distributed.comm.timeouts": {"connect": "300s", "tcp": "300s",},
-        "distributed.scheduler.bandwidth": 100000000,
-        # "managed_in_memory",#
-        "distributed.worker.memory.rebalance.measure": "optimistic",
-        "distributed.worker.memory.target": 0.90,  # 0.85,
-        "distributed.worker.memory.spill": 0.92,  # False,#
-        "distributed.worker.memory.pause": 0.95,  # False,#
-        "distributed.worker.memory.terminate": 0.98,  # False, #
-        # 'distributed.scheduler.unknown-task-duration': '15m',
-        # 'distributed.scheduler.default-task-durations': '2h',
-        #'tick': {
-        #    'interval': '20ms',
-        #    'limit': '30s',
-        #    'cycle': '1s',
-        #},
-    }
-)
-
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
 
 logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
+    
 def get_smartspim_default_config() -> dict:
     """
     Effective parameters found to work with SmartSPIM nuclei signals
@@ -192,8 +166,19 @@ def set_up_dask_config(tmp_folder: PathLike):
 
     """
     dask.config.set(
-        {"temporary_directory": tmp_folder},
-        {"tick": {"interval": "20ms", "limit": "30s", "cycle": "1s",},},
+        {
+            "temporary-directory": tmp_folder,
+            "local_directory": tmp_folder,
+            "tcp-timeout": "300s",
+            "array.chunk-size": "384MiB",
+            "distributed.comm.timeouts": {"connect": "300s", "tcp": "300s",},
+            "distributed.scheduler.bandwidth": 100000000,
+            "distributed.worker.memory.rebalance.measure": "optimistic",
+            "distributed.worker.memory.target": 0.90,  # 0.85,
+            "distributed.worker.memory.spill": 0.92,  # False,#
+            "distributed.worker.memory.pause": 0.95,  # False,#
+            "distributed.worker.memory.terminate": 0.98,  # False, #
+        }
     )
 
 class Segment(ArgSchemaParser):
@@ -360,7 +345,7 @@ class Segment(ArgSchemaParser):
             signal_array.chunksize
         )
         print(f"There are {len(blocks)} delayed blocks to process.")
-
+ 
         logger.info(f"Running background subtraction and segmentation with array {signal_array}")
         dask_workers = 8
         #start client

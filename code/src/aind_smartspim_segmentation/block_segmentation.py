@@ -7,9 +7,10 @@ Modified by camilo.laiton on Tue Jan 10 12:19:00 2022
 
 Module for the segmentation of smartspim datasets
 """
+
+import json
 import logging
 import os
-import numpy as np
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -22,9 +23,10 @@ import yaml
 from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile
 from argschema.fields import Boolean, Int, Str, List
-from cellfinder_core.detect import detect
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
+from ng_link import NgState
+from ng_link.ng_state import get_points_from_xml
 
 from .__init__ import __version__
 from .block_utils import delay_astro, create_folder, generate_processing, delay_detect, delay_preprocess

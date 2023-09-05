@@ -133,5 +133,6 @@ def main():
 
     image_path = block_segmentation.main(pipeline_config)
 
+
 if __name__ == "__main__":
     main()

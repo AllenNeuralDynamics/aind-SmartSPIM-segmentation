@@ -61,7 +61,6 @@ def astro_preprocess(
     L = 5
     params_m = {"M": 1023.0, "a": np.full(L, 11), "p": 0.7}
     for depth in range(img.shape[0]):
-
         curr_img = img[depth, :, :].copy()
         sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
 
@@ -118,7 +117,9 @@ def astro_preprocess(
 
 
 def generate_processing(
-    data_processes: List[dict], dest_processing: PathLike, pipeline_version: str,
+    data_processes: List[dict],
+    dest_processing: PathLike,
+    pipeline_version: str,
 ) -> None:
     """
     Generates data description for the output folder.

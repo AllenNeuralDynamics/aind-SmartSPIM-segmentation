@@ -4,13 +4,11 @@
 Created on Mon Nov 28 12:23:13 2022
 
 @author: nicholas.lusk
-@Modified by: camilo.laiton
 """
-
 import importlib
 import os
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import dask
 import dask.array as da
@@ -19,7 +17,6 @@ import skimage.io
 from aind_data_schema import Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
-from imlib.IO.cells import get_cells, save_cells
 from photutils.background import Background2D
 from scipy import ndimage as ndi
 from scipy.signal import medfilt2d
@@ -27,20 +24,19 @@ from scipy.signal import medfilt2d
 from .pymusica import musica
 
 PathLike = Union[str, Path]
-ArrayLike = Union[dask.array.core.Array, np.ndarray]
 
 
 @dask.delayed
-def delay_astro(
-    img: ArrayLike,
-    estimator: str = "MedianBackground",
-    box: Tuple[int] = (50, 50),
-    filt: Tuple[int] = (3, 3),
-    sig_clip: int = 3,
-    pad: int = 0,
-    reflect: int = 0,
-    amplify: bool = False,
-    smooth: bool = False,
+def astro_preprocess(
+    img,
+    estimator="MedianBackground",
+    box=(50, 50),
+    filt=(3, 3),
+    sig_clip=3,
+    pad=0,
+    reflect=0,
+    amplify=False,
+    smooth=False,
 ):
     """
     Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
@@ -70,13 +66,16 @@ def delay_astro(
 
     """
 
+    # convert dask array array
+    img = np.array(img).astype("uint16")
+
     if reflect != 0:
         img = np.pad(img, reflect, mode="reflect")
 
     if pad != 0:
         img = np.pad(img, pad, mode="constant", constant_values=0)
 
-    # print(img.shape)
+    print(img.shape)
 
     # get estimator function for background subtraction
     est = getattr(importlib.import_module("photutils.background"), estimator)
@@ -110,7 +109,7 @@ def delay_astro(
                     fill_value=0.0,
                     sigma_clip=sigma_clip,
                     coverage_mask=mask,
-                    exclude_percentile=100,
+                    exclude_percentile=50,
                 )
 
         else:
@@ -145,169 +144,80 @@ def delay_astro(
 
 
 @dask.delayed
-def delay_preprocess(
-    img: ArrayLike, reflect: int, pad: int, subtract: bool = False, bkg: ArrayLike = None
-):
-    """
-    Dask delayed function to clip and pad values in
-    a dask array.
-
-    Parameters
-    ------------
-    img: ArrayLike
-        Array with the image to process
-
-    reflect: int
-        Mode for the padding
-
-    pad: int
-        Padding value to apply
-        around the image
-
-    subtract: bool
-        If we want to subtract a background
-        image. Default: False
-
-    bkg: ArrayLike
-        Background image
-
-    Returns
-    ------------
-    ArrayLike:
-        Lazy array with scheduled padding
-    """
-
+def delay_preprocess(img, reflect, pad, subtract, bkg=None):
     if subtract:
-        img = img - bkg
-        img = da.clip(img, a_min=0, a_max=65535)
+        img2 = img - bkg
+        img2 = np.clip(img2, a_min=0, a_max=65535)
+    else:
+        img2 = img
 
-    img = da.pad(img, reflect, mode="reflect")
-    img = da.pad(img, pad, mode="constant", constant_values=0)
+    img2 = np.pad(img2, reflect, mode="reflect")
+    img2 = np.pad(img2, pad, mode="constant", constant_values=0)
 
-    return img
+    return img2
 
 
 @dask.delayed
-def delay_detect(
-    img: ArrayLike,
-    save_path: PathLike,
-    count: int,
-    offset: int,
-    padding: int,
-    process_by,
-    smartspim_config: dict,
-):
-    """
-    Delayed function to run cellfinder
-    main script.
-    """
-    cells = detect.main(
+def delay_detect(img, save_path, block, offset, padding, process_by, stat, smartspim_config):
+    cell_count = detect.main(
         signal_array=np.asarray(img),
         save_path=save_path,
-        block=count,
+        block=block,
         offset=offset,
         padding=padding,
         process_by=process_by,
+        stats=stat,
         **smartspim_config,
     )
 
-    return cells
+    return cell_count
 
 
 @dask.delayed
-def delay_postprocess(count: int, save_path: str, cells, offset: int, padding: int, dims: int):
-    """
-    Delayed postprocess to save identified cells
-    per block
-    """
-    bad_cells = []
-    for c, cell in enumerate(cells):
-        loc = [cell.x - padding, cell.y - padding, cell.z - padding]
+def delayed_rechunk(array, by, size=1024):
+    if by == "plane":
+        rechunk_size = tuple([1, array.shape[1], array.shape[2]])
+    elif by == "cube":
+        rechunk_size = [axis * (self.args["chunk_size"] // axis) for axis in signal_array.chunksize]
+        rechunk_size = tuple(rechunk_size)
 
-        if min(loc) < 0 or max([l - (s - 2 * padding) for l, s in zip(loc, dims)]) > 0:
-            bad_cells.append(c)
-        else:
-            cell.x = loc[0] + offset[0]
-            cell.y = loc[1] + offset[1]
-            cell.z = loc[2] + offset[2]
-
-            if cell.type == -1:
-                cell.type = 1
-
-            cells[c] = cell
-
-    for c in bad_cells[::-1]:
-        cells.pop(c)
-
-    # save the blocks
-    fname = "cells_block_" + str(count) + ".xml"
-    print(f"Saving cells to path: {fname}")
-    save_cells(cells, os.path.join(save_path, fname))
-
-    return len(cells)
+    return array.rechunk(rechunk_size)
 
 
 @dask.delayed
-def delay_plane_stats(plane: ArrayLike, log_sigma_size: int, soma_diameter: float, count: int):
-    """
-    Delayed dask function to get
-    plane statistics
-    """
-    plane = plane.squeeze()
+def delayed_plane_stats(plane, log_sigma_size, soma_diameter, count):
+    plane = np.asarray(plane).squeeze()
     gaussian_sigma = log_sigma_size * soma_diameter
-    plane = medfilt2d(plane.astype(np.float64))
-    plane = ndi.gaussian_filter(plane, gaussian_sigma)
-    plane = ndi.laplace(plane)
-    plane = plane * -1
+    filtered_img = medfilt2d(plane.astype(np.float64))
+    filtered_img = ndi.gaussian_filter(filtered_img, gaussian_sigma)
+    filtered_img = ndi.laplace(filtered_img)
+    filtered_img = filtered_img * -1
 
-    plane = plane - plane.min()
-    plane = np.nan_to_num(plane)
+    filtered_img = filtered_img - filtered_img.min()
+    filtered_img = np.nan_to_num(filtered_img)
 
-    if plane.max() != 0:
-        maxima = plane.max()
-        plane = plane / maxima
+    if filtered_img.max() != 0:
+        filtered_img = filtered_img / filtered_img.max()
 
     # To leave room to label in the 3d detection.
-    plane = plane * (2**16 - 3)
+    out_img = filtered_img * (2**16 - 3)
 
-    return np.array([count, maxima, plane.ravel().mean(), plane.ravel().std()])
-
-
-@dask.delayed
-def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, count, smartspim_config):
-    img = np.pad(img, reflect, mode="reflect")
-    img = np.pad(img, pad, mode="constant", constant_values=0)
-
-    cells = detect.main(
-        signal_array=img, save_path=save_path, process_by=process_by, stats=stat, **smartspim_config
+    return np.array(
+        [count, filtered_img.ravel().max(), out_img.ravel().mean(), out_img.ravel().std()]
     )
 
-    bad_cells = []
-    padding = pad + reflect
-    for c, cell in enumerate(cells):
-        loc = [cell.x - padding, cell.y - padding, cell.z - padding]
 
-        if min(loc) < 0 or max([l - (s - 2 * padding) for l, s in zip(loc, dims)]) > 0:
-            bad_cells.append(c)
-        else:
-            cell.x = loc[0] + offset[0]
-            cell.y = loc[1] + offset[1]
-            cell.z = loc[2] + offset[2]
+def reg_detect(img, save_path, block, offset, padding, smartspim_config):
+    cell_count = detect.main(
+        signal_array=img,
+        save_path=save_path,
+        block=block,
+        offset=offset,
+        padding=padding,
+        **smartspim_config,
+    )
 
-            if cell.type == -1:
-                cell.type = 1
-
-            cells[c] = cell
-
-    for c in bad_cells[::-1]:
-        cells.pop(c)
-
-    # save the blocks
-    fname = "cells_block_" + str(count) + ".xml"
-    print(f"Saving cells to path: {fname}")
-    save_cells(cells, os.path.join(save_path, fname))
-
-    return len(cells)
+    return cell_count
 
 
 def generate_processing(

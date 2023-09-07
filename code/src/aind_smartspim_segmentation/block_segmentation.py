@@ -387,7 +387,7 @@ class Segment(ArgSchemaParser):
         with performance_report(filename=dask_report_file):
             count = 0
             padding = 50
-            offload = len(blocks) // 3
+            offload = len(blocks) // 2
             loop_chunks = [
                 (blocks[:offload], offsets[:offload]),
                 (blocks[offload:], offsets[offload:]),

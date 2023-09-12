@@ -1,11 +1,11 @@
 """
-Created on Thu Dec  8 15:06:14 2022
+Created on Friday August 4, 2023
 
 @author: nicholas.lusk
 
-Modified by camilo.laiton on Tue Jan 10 12:19:00 2022
+Modified by camilo.laiton on Monday August 7 2023
 
-Module for the segmentation of smartspim datasets
+Module for the chunked segmentation of smartspim datasets
 """
 import json
 import logging
@@ -17,12 +17,10 @@ from typing import Union
 
 import dask
 import dask.array as da
-import numpy as np
 import yaml
 from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile
 from argschema.fields import Boolean, Int, List, Str
-from cellfinder_core.detect import detect
 from dask.distributed import Client, LocalCluster, performance_report
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
@@ -30,7 +28,7 @@ from ng_link import NgState
 from ng_link.ng_state import get_points_from_xml
 
 from .__init__ import __version__
-from .utils import astro_preprocess, create_folder, generate_processing
+from .chunked_utils import astro_preprocess, create_folder, delay_detect, generate_processing
 
 PathLike = Union[str, Path]
 
@@ -55,7 +53,7 @@ def get_smartspim_default_config() -> dict:
         "start_plane": 0,
         "end_plane": 0,
         "n_free_cpus": 2,
-        "voxel_sizes": [4, 1.8, 1.8],  # in microns
+        "voxel_sizes": [1.8, 2.0, 1.8],  # in microns
         "soma_diameter": 9,  # in microns
         "ball_xy_size": 8,
         "ball_overlap_fraction": 0.6,
@@ -91,6 +89,28 @@ def get_yaml_config(filename: str) -> dict:
     return config
 
 
+def set_up_dask_config(tmp_folder: PathLike):
+    """
+    Sets up dask configuration
+
+    Parameters
+    ----------
+    tmp_folder: PathLike
+        Path to temporary folder
+
+    """
+    dask.config.set(
+        {"temporary_directory": tmp_folder},
+        {
+            "tick": {
+                "interval": "20ms",
+                "limit": "30s",
+                "cycle": "1s",
+            },
+        },
+    )
+
+
 class SegSchema(ArgSchema):
     """
     Schema format for Segmentation
@@ -111,6 +131,8 @@ class SegSchema(ArgSchema):
 
     input_channel = Str(metadata={"required": True, "description": "Channel to segment"})
 
+    bkg_channel = Str(metadata={"required": True, "description": "Background channel"})
+
     input_scale = Int(metadata={"required": True, "description": "Zarr scale to start with"})
 
     chunk_size = Int(
@@ -121,7 +143,7 @@ class SegSchema(ArgSchema):
             (needed to prevent memory crashes)
             """,
         },
-        dump_default=250,
+        dump_default=1024,
     )
 
     bkg_subtract = Boolean(
@@ -156,44 +178,6 @@ class SegSchema(ArgSchema):
         }
     )
 
-    signal_start = Int(
-        metadata={
-            "required": True,
-            "description": "Z index (slice) where we want to start running segmentation on",
-        },
-        dump_default=0,
-    )
-
-    signal_end = Int(
-        metadata={
-            "required": True,
-            "description": "Z index (slice) where we want to end running segmentation on",
-        },
-        dump_default=-1,
-    )
-
-
-def set_up_dask_config(tmp_folder: PathLike):
-    """
-    Sets up dask configuration
-
-    Parameters
-    ----------
-    tmp_folder: PathLike
-        Path to temporary folder
-
-    """
-    dask.config.set(
-        {"temporary_directory": tmp_folder},
-        {
-            "tick": {
-                "interval": "20ms",
-                "limit": "30s",
-                "cycle": "1s",
-            },
-        },
-    )
-
 
 class Segment(ArgSchemaParser):
 
@@ -222,14 +206,40 @@ class Segment(ArgSchemaParser):
         signal_array = da.from_zarr(image_path)
         return signal_array
 
-    def run(self, results_path_co: PathLike) -> str:
+    def calculate_offsets(self, blocks, chunk_size):
         """
-        Runs SmartSPIM Segmentation
+        creates list of offsets for each chunk based on its location
+        in the dask array
 
         Parameters
         ----------
-        results_path_co: PathLike
-            Results path in code ocean
+        blocks : tuple
+            The number of blocks in each direction (z, col, row)
+
+        chunk_size : tuple
+            The number of values along each dimention of a chunk (z, col, row)
+
+        Return
+        ------
+        offests: list
+            The offsets of each block in "C order
+        """
+        offsets = []
+        for dv in range(blocks[0]):
+            for ap in range(blocks[1]):
+                for ml in range(blocks[2]):
+                    offsets.append(
+                        [
+                            chunk_size[2] * ml,
+                            chunk_size[1] * ap,
+                            chunk_size[0] * dv,
+                        ]
+                    )
+        return offsets
+
+    def run(self) -> str:
+        """
+        Runs SmartSPIM Segmentation
 
         Returns
         ----------
@@ -272,37 +282,14 @@ class Segment(ArgSchemaParser):
             image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
 
         data_processes = []
+        logger.info(image_path)
 
         # load signal data
         start_date_time = datetime.now()
         signal_array = self.__read_zarr_image(image_path)
         end_date_time = datetime.now()
 
-        # setup step range for segmentation based on zarr chunking
-        # Setting to -3 since it's TCZYX
-        z_chunk = signal_array.chunksize[-3]
-        chunk_step = 250
-        if z_chunk % 64 == 0:
-            chunk_step = 256
-        elif z_chunk == 1 or z_chunk == 250:
-            chunk_step = 250
-
-        logger.info(f"z-plane chunk size: {z_chunk}. Processing with chunk size: {chunk_step}.")
-
-        # Loading only 3D data
-        signal_start = self.args["signal_start"]
-        signal_end = self.args["signal_end"]
-        if signal_end == -1:
-            signal_end = signal_array.shape[-3]
-
         signal_array = signal_array[0, 0, :, :, :]
-        logger.info(
-            f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
-        )
-
-        # Setting up configuration
-        smartspim_config["start_plane"] = signal_start
-        smartspim_config["end_plane"] = signal_end
 
         data_processes.append(
             DataProcess(
@@ -314,144 +301,70 @@ class Segment(ArgSchemaParser):
                 output_location=str(image_path),
                 code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
                 parameters={},
-                notes="Importing fused data for cell segmentation",
+                notes="Importing stitched data for cell segmentation",
             )
         )
 
-        # setup step range for segmentation based on zarr chunking
-        steps_z = np.append(
-            np.arange(
-                0,
-                signal_array.shape[0],
-                chunk_step,
-            ),
-            signal_array.shape[0],
+        logger.info(f"Running background subtraction and segmentation with array {signal_array}")
+        dask_workers = 8
+        # start client
+        cluster = LocalCluster(
+            n_workers=dask_workers,
+            processes=True,
+            threads_per_worker=1,
         )
 
-        holdover = {}
+        logger.info(f"running with {dask_workers} workers")
 
-        # check if background subtraction will be executed
-        if self.args["bkg_subtract"]:
-            logger.info(f"Running background subtraction and segmentation with array {signal_array}")
+        client = Client(cluster)
+        with performance_report(filename="/results/dask_profile.html"):
+            # get into roughly 500px chunks
+            rechunk_size = [
+                axis * (self.args["chunk_size"] // axis) for axis in signal_array.chunksize
+            ]
+            signal_array = signal_array.rechunk(tuple(rechunk_size))
 
-            # start client
-            cluster = LocalCluster(
-                n_workers=16,
-                processes=True,
-                threads_per_worker=1,
-            )
+            blocks = signal_array.to_delayed().ravel()
 
-            client = Client(cluster)
+            offsets = self.calculate_offsets(signal_array.numblocks, signal_array.chunksize)
 
-            for z in range(len(steps_z) - 1):
-                dask_report_file = f"{results_path_co}/dask_profile_loop_{z}.html"
+            count = 0
+            padding = 50
+            offload = len(blocks) // 3
+            loop_chunks = [
+                (blocks[:offload], offsets[:offload]),
+                (blocks[offload:], offsets[offload:]),
+            ]
 
-                with performance_report(filename=dask_report_file):
-                    bkg_start_date_time = datetime.now()
+            for lc in loop_chunks:
+                results = []
+                for block, offset in zip(*lc):
+                    if self.args["bkg_subtract"]:
+                        bkg_sub = astro_preprocess(
+                            block, pad=padding, reflect=smartspim_config["soma_diameter"]
+                        )
+                    else:
+                        bkg_sub = block
 
-                    bkg_array = da.map_blocks(
-                        astro_preprocess,
-                        signal_array[steps_z[z] : steps_z[z + 1], :, :],
-                        "MMMBackground",
-                        dtype=signal_array.dtype,
-                        chunks=(
-                            signal_array.chunks[0][z],
-                            signal_array.chunks[1],
-                            signal_array.chunks[2],
-                        ),
-                    ).compute()
-
-                    bkg_array = np.array(bkg_array)
-                    bkg_array = bkg_array[
-                        :: self.args["subsample"][0],
-                        :: self.args["subsample"][1],
-                        :: self.args["subsample"][2],
-                    ]
-
-                    bkg_end_date_time = datetime.now()
-
-                    holdover = detect.main(
-                        signal_array=bkg_array,
-                        save_path=self.args["metadata_path"],
-                        chunk_size=chunk_step,
-                        block=z,
-                        holdover=holdover,
-                        **smartspim_config,
+                    cell_count = delay_detect(
+                        bkg_sub,
+                        self.args["metadata_path"],
+                        count,
+                        offset,
+                        padding + smartspim_config["soma_diameter"],
+                        "block",
+                        smartspim_config,
                     )
 
-                    cell_end_date_time = datetime.now()
+                    count += 1
 
-                    del bkg_array
+                    results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
+                arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+                cell_count_list = arr.compute()
+                logger.info("Reseting client to try to avoid memory issues.")
+                client.restart()
 
-            logger.info("Background subtraction completed. Closing dask client.")
-            client.close()
-
-            data_processes.append(
-                DataProcess(
-                    name="Image background subtraction",
-                    version=__version__,
-                    start_date_time=bkg_start_date_time,
-                    end_date_time=bkg_end_date_time,
-                    input_location=str(image_path),
-                    output_location="In memory array",
-                    code_url="https://github.com/astropy/astropy.github.com",
-                    parameters=smartspim_config,
-                    notes="Background subtraction",
-                )
-            )
-
-            data_processes.append(
-                DataProcess(
-                    name="Image cell segmentation",
-                    version=__version__,
-                    start_date_time=bkg_end_date_time,
-                    end_date_time=cell_end_date_time,
-                    input_location=str(image_path),
-                    output_location="In memory array",
-                    code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/bkg_sub",
-                    parameters=smartspim_config,
-                    notes="Calculated using background subtraction",
-                )
-            )
-        else:
-            logger.info(f"Running segmentation with array {signal_array}")
-            start_date_time = datetime.now()
-
-            for z in range(len(steps_z) - 1):
-                bkg_array = np.array(signal_array[steps_z[z] : steps_z[z + 1], :, :])
-                bkg_array = bkg_array[
-                    :: self.args["subsample"][0],
-                    :: self.args["subsample"][1],
-                    :: self.args["subsample"][2],
-                ]
-
-                holdover = detect.main(
-                    signal_array=bkg_array,
-                    save_path=self.args["metadata_path"],
-                    chunk_size=chunk_step,
-                    block=z,
-                    holdover=holdover,
-                    **smartspim_config,
-                )
-
-                del bkg_array
-
-            end_date_time = datetime.now()
-
-            data_processes.append(
-                DataProcess(
-                    name="Image cell segmentation",
-                    version=__version__,
-                    start_date_time=start_date_time,
-                    end_date_time=end_date_time,
-                    input_location=str(image_path),
-                    output_location=str(self.args["metadata_path"]),
-                    code_url="https://github.com/camilolaiton/cellfinder-core/tree/feature/lazy_reader",
-                    parameters=smartspim_config,
-                    notes="Cell segmentation with XML outputs",
-                )
-            )
-
+        client.close()
         processing_path = Path(self.args["metadata_path"]).joinpath("processing.json")
 
         generate_processing(
@@ -473,7 +386,10 @@ class Segment(ArgSchemaParser):
         tmp_files = glob(self.args["metadata_path"] + "/*.xml")
 
         for f in natsorted(tmp_files):
-            cells.extend(get_cells(f))
+            try:
+                cells.extend(get_cells(f))
+            except:
+                pass
 
         # save list of all cells
         save_cells(
@@ -617,6 +533,24 @@ def main(input_config: dict):
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
     generate_neuroglancer_link(image_path, detected_cells_path, results_path)
+
+    return image_path
+
+
+def main():
+    """
+    Main function
+    """
+    default_params = {
+        "bkg_subtract": False,
+        "subsample": [1, 1, 1],
+        "save_path": "/results/",
+        "metadata_path": "/results/metadata",
+    }
+
+    seg = Segment(default_params)
+    image_path = seg.run()
+    seg.merge()
 
     return image_path
 

@@ -329,7 +329,7 @@ class Segment(ArgSchemaParser):
         if signal_end == -1:
             signal_end = signal_array.shape[-3]
 
-        signal_array = signal_array[0, 0, :, :, :]
+        signal_array = signal_array[0, 0, :10, :, :]
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )
@@ -590,7 +590,7 @@ def main(input_config: dict):
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
-    generate_neuroglancer_link(image_path, detected_cells_path, default_params["save_path"])
+    generate_neuroglancer_link(image_path, detected_cells_path, default_params['save_path'])
 
     return image_path
 

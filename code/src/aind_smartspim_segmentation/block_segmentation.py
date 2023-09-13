@@ -546,7 +546,7 @@ def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output
         )
 
         json_state = neuroglancer_link.state
-        channel_name = dataset_name[4].replace(".zarr", "")
+        channel_name = dataset_name[-1].replace(".zarr", "")
         json_state[
             "ng_link"
         ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"

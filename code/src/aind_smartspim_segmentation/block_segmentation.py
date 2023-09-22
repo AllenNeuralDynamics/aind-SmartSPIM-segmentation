@@ -456,7 +456,9 @@ class Segment(ArgSchemaParser):
         )
 
 
-def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output: str):
+def generate_neuroglancer_link(
+    image_path: str, detected_cells_path: str, output: str, config_file_path: str
+):
     """
     Generates neuroglancer link with the cell location
     for a specific dataset
@@ -473,13 +475,14 @@ def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output
         Output path of the neuroglancer
         config and precomputed format
 
+    config_file_path: str
+        Path where the smartspim config file
+        is located
     """
 
     logger.info(f"Reading cells from {detected_cells_path}")
     cells = get_points_from_xml(detected_cells_path)
-    smartspim_config_path = os.path.abspath(
-        "/code/src/aind_smartspim_segmentation/smartspim_config.yml"
-    )
+    smartspim_config_path = os.path.abspath(config_file_path)
     smartspim_config = get_yaml_config(smartspim_config_path)
 
     # Getting path
@@ -498,6 +501,7 @@ def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output
     output_precomputed = os.path.join(output, "visualization/precomputed")
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
     create_folder(output_precomputed)
+    print(f"Output cells precomputed: {output_precomputed}")
 
     if smartspim_config is None:
         smartspim_config = get_smartspim_default_config()
@@ -507,59 +511,59 @@ def generate_neuroglancer_link(image_path: str, detected_cells_path: str, output
             Using default config {smartspim_config}
             """
         )
-    else:
-        logger.info(f"Image path in {image_path}")
-        example_data = {
-            "dimensions": {
-                # check the order
-                "z": {"voxel_size": smartspim_config["voxel_sizes"][0], "unit": "microns"},
-                "y": {"voxel_size": smartspim_config["voxel_sizes"][1], "unit": "microns"},
-                "x": {"voxel_size": smartspim_config["voxel_sizes"][2], "unit": "microns"},
-                "t": {"voxel_size": 0.001, "unit": "seconds"},
+
+    logger.info(f"Image path in {image_path}")
+    example_data = {
+        "dimensions": {
+            # check the order
+            "z": {"voxel_size": smartspim_config["voxel_sizes"][0], "unit": "microns"},
+            "y": {"voxel_size": smartspim_config["voxel_sizes"][1], "unit": "microns"},
+            "x": {"voxel_size": smartspim_config["voxel_sizes"][2], "unit": "microns"},
+            "t": {"voxel_size": 0.001, "unit": "seconds"},
+        },
+        "layers": [
+            {
+                "source": image_path,
+                "type": "image",
+                "channel": 0,
+                # 'name': 'image_name_0',
+                "shader": {"color": "gray", "emitter": "RGB", "vec": "vec3"},
+                "shaderControls": {"normalized": {"range": [0, 500]}},  # Optional
             },
-            "layers": [
-                {
-                    "source": image_path,
-                    "type": "image",
-                    "channel": 0,
-                    # 'name': 'image_name_0',
-                    "shader": {"color": "gray", "emitter": "RGB", "vec": "vec3"},
-                    "shaderControls": {"normalized": {"range": [0, 500]}},  # Optional
-                },
-                {
-                    "type": "annotation",
-                    "source": f"precomputed://{output_precomputed}",
-                    "tool": "annotatePoint",
-                    "name": "annotation_name_layer",
-                    "annotations": cells,
-                },
-            ],
-        }
-        bucket_path = "aind-open-data"
-        neuroglancer_link = NgState(
-            input_config=example_data,
-            base_url="https://aind-neuroglancer-sauujisjxq-uw.a.run.app",
-            mount_service="s3",
-            bucket_path=bucket_path,
-            output_json=os.path.join(output, "visualization"),
-            json_name=json_name,
-        )
+            {
+                "type": "annotation",
+                "source": f"precomputed://{output_precomputed}",
+                "tool": "annotatePoint",
+                "name": "annotation_name_layer",
+                "annotations": cells,
+            },
+        ],
+    }
+    bucket_path = "aind-open-data"
+    neuroglancer_link = NgState(
+        input_config=example_data,
+        base_url="https://aind-neuroglancer-sauujisjxq-uw.a.run.app",
+        mount_service="s3",
+        bucket_path=bucket_path,
+        output_json=os.path.join(output, "visualization"),
+        json_name=json_name,
+    )
 
-        json_state = neuroglancer_link.state
-        channel_name = dataset_name[-1].replace(".zarr", "")
-        json_state[
-            "ng_link"
-        ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
+    json_state = neuroglancer_link.state
+    channel_name = dataset_name[-1].replace(".zarr", "")
+    json_state[
+        "ng_link"
+    ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
 
-        json_state["layers"][1][
-            "source"
-        ] = f"precomputed://s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/precomputed"
+    json_state["layers"][1][
+        "source"
+    ] = f"precomputed://s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/precomputed"
 
-        logger.info(f"Visualization link: {json_state['ng_link']}")
-        output_path = os.path.join(output, json_name)
+    logger.info(f"Visualization link: {json_state['ng_link']}")
+    output_path = os.path.join(output, json_name)
 
-        with open(output_path, "w") as outfile:
-            json.dump(json_state, outfile, indent=2)
+    with open(output_path, "w") as outfile:
+        json.dump(json_state, outfile, indent=2)
 
 
 def main(input_config: dict):
@@ -590,7 +594,9 @@ def main(input_config: dict):
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
-    generate_neuroglancer_link(image_path, detected_cells_path, default_params['save_path'])
+    generate_neuroglancer_link(
+        image_path, detected_cells_path, default_params["save_path"], default_params["config_file"]
+    )
 
     return image_path
 

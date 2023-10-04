@@ -1,5 +1,5 @@
 metadata_version: 1
-name: Hot Test - SmartSPIM Cell Segmentation Capsule
+name: Hot Test 1.0 - SmartSPIM Cell Segmentation Capsule
 description: A tool for automated segmentation of Cells or Nuclei from wholebrain
   lightsheet image volumes
 tags:

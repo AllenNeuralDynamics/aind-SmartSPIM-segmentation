@@ -302,6 +302,8 @@ class Segment(ArgSchemaParser):
             f"{self.args['input_channel']}/{self.args['input_scale']}"
         )
 
+        print(f"Image path is set as: {image_path}")
+
         if not os.path.isdir(str(image_path)):
             root_path = Path(self.args["input_data"])
             channels = [folder for folder in os.listdir(root_path) if folder != ".zgroup"]
@@ -594,6 +596,10 @@ def main(input_config: dict):
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
+    
+    image_path = os.path.abspath(f"{default_params['input_data']}/{default_params['input_channel']}")
+    
+    logger.info(f"Image path to generate the neuroglancer link: {image_path}")
     generate_neuroglancer_link(
         image_path, detected_cells_path, default_params["save_path"], default_params["config_file"]
     )

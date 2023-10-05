@@ -591,6 +591,7 @@ def main(dataset_name: str, input_config: dict):
     image_path = os.path.abspath(f"{default_params['input_data']}/{default_params['input_channel']}")
     
     logger.info(f"Image path to generate the neuroglancer link: {image_path}")
+    logger.info(f"Dataset name: {dataset_name} with channel {input_config['segmentation']['channel']}")
     generate_neuroglancer_link(
         image_path,
         dataset_name,

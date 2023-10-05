@@ -134,7 +134,7 @@ def main():
     dataset_name = data_description["name"]
 
     logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
-
+    logger.info(f"Dataset name: {dataset_name}")
     image_path = block_segmentation.main(dataset_name, pipeline_config)
 
 

@@ -124,14 +124,18 @@ def main():
 
     data_folder = os.path.abspath("../data/")
     processing_manifest_path = glob(f"{data_folder}/processing_manifest_*")[0]
+    data_description_path = f"{data_folder}/data_description.json"
 
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
 
     pipeline_config = read_json_as_dict(processing_manifest_path)
-    logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
+    data_description = read_json_as_dict(data_description_path)
+    dataset_name = data_description["name"]
 
-    image_path = block_segmentation.main(pipeline_config)
+    logger.info(f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}")
+    logger.info(f"Dataset name: {dataset_name}")
+    image_path = block_segmentation.main(dataset_name, pipeline_config)
 
 
 if __name__ == "__main__":

@@ -457,7 +457,12 @@ class Segment(ArgSchemaParser):
 
 
 def generate_neuroglancer_link(
-    image_path: str, detected_cells_path: str, output: str, config_file_path: str
+    image_path: str,
+    dataset_name: str,
+    channel_name: str,
+    detected_cells_path: str,
+    output: str,
+    config_file_path: str,
 ):
     """
     Generates neuroglancer link with the cell location
@@ -467,6 +472,13 @@ def generate_neuroglancer_link(
     -----------
     image_path: str
         Path to the zarr file
+
+    dataset_name: str
+        Dataset name where the data will be stored
+        in the cloud. Follows SmartSPIM_***_stitched_***
+
+    channel_name: str
+        Channel name that was processed
 
     detected_cells_path: str
         Path to the detected cells
@@ -484,19 +496,6 @@ def generate_neuroglancer_link(
     cells = get_points_from_xml(detected_cells_path)
     smartspim_config_path = os.path.abspath(config_file_path)
     smartspim_config = get_yaml_config(smartspim_config_path)
-
-    # Getting path
-    dataset_name = []
-    include = False
-    # Excluding multiscale
-    for folder in image_path.split("/")[:-1]:
-        if "SmartSPIM" in folder:
-            include = True
-
-        if include:
-            dataset_name.append(folder)
-
-    image_path = "/".join(dataset_name)
 
     output_precomputed = os.path.join(output, "visualization/precomputed")
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
@@ -550,14 +549,13 @@ def generate_neuroglancer_link(
     )
 
     json_state = neuroglancer_link.state
-    channel_name = dataset_name[-1].replace(".zarr", "")
     json_state[
         "ng_link"
-    ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
+    ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
 
     json_state["layers"][1][
         "source"
-    ] = f"precomputed://s3://{bucket_path}/{dataset_name[0]}/image_cell_segmentation/{channel_name}/visualization/precomputed"
+    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/precomputed"
 
     logger.info(f"Visualization link: {json_state['ng_link']}")
     output_path = os.path.join(output, json_name)
@@ -566,7 +564,7 @@ def generate_neuroglancer_link(
         json.dump(json_state, outfile, indent=2)
 
 
-def main(input_config: dict):
+def main(dataset_name: str, input_config: dict):
     """
     Main function
     """
@@ -594,8 +592,18 @@ def main(input_config: dict):
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
+
+    logger.info(f"Image path to generate the neuroglancer link: {image_path}")
+    logger.info(
+        f"Dataset name: {dataset_name} with channel {input_config['segmentation']['channel']}"
+    )
     generate_neuroglancer_link(
-        image_path, detected_cells_path, default_params["save_path"], default_params["config_file"]
+        image_path,
+        dataset_name,
+        input_config["segmentation"]["channel"],
+        detected_cells_path,
+        default_params["save_path"],
+        default_params["config_file"],
     )
 
     return image_path

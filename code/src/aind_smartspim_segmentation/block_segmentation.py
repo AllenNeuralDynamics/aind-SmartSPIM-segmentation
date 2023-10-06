@@ -593,6 +593,7 @@ def main(dataset_name: str, input_config: dict):
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
 
+    image_path = os.path.abspath(f"{default_params['input_data']}/{default_params['input_channel']}")
     logger.info(f"Image path to generate the neuroglancer link: {image_path}")
     logger.info(
         f"Dataset name: {dataset_name} with channel {input_config['segmentation']['channel']}"

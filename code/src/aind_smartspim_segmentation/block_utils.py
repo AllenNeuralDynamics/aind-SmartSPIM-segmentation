@@ -18,6 +18,7 @@ import numpy as np
 import skimage.io
 from aind_data_schema import Processing
 from astropy.stats import SigmaClip
+from brainglobe_utils.cells.cells import Cell
 from cellfinder_core.detect import detect
 from imlib.IO.cells import get_cells, save_cells
 from photutils.background import Background2D
@@ -28,7 +29,6 @@ from .pymusica import musica
 
 PathLike = Union[str, Path]
 ArrayLike = Union[dask.array.core.Array, np.ndarray]
-
 
 @dask.delayed
 def delay_astro(
@@ -309,6 +309,58 @@ def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, coun
 
     return len(cells)
 
+def remove_doublets(cells, dist = 7):
+    '''
+    Function to find and remove doublets
+    
+    Parameters
+    ----------
+    cells : list
+        list of Cells from segmentation
+    dist : int, optional
+        distance in px for KDTree. The default is 7px.
+
+    Returns
+    -------
+    list
+        list of Cells to save as .xml
+
+    '''
+
+    coords = []
+    for cell in cells:
+        coords.append(
+            [
+                cell.x,
+                cell.y,
+                cell.z
+            ]
+        )
+
+    detected_tree = KDTree(np.array(coords))
+    detected_pairs = detected_tree.query_pairs(r = dist)
+    
+    try:
+        pairs = np.array(list(detected_pairs))
+        pairs = pairs[pairs[:, 0].argsort()]
+    
+        drop = []
+        for p in pairs:
+            if p[0] in drop:
+                pass
+            else:
+                drop.append(p[1])
+
+        kept_cells = []
+        for idx in range(len(cells)):
+            if idx in drop:
+                pass
+            else:
+                kept_cells.append(cells[idx])
+
+        return kept_cells
+    except IndexError:
+        return cells
 
 def generate_processing(
     data_processes: List[dict],

@@ -35,6 +35,7 @@ from .block_utils import (
     delay_detect,
     delay_preprocess,
     generate_processing,
+    remove_doublets
 )
 
 PathLike = Union[str, Path]
@@ -451,6 +452,8 @@ class Segment(ArgSchemaParser):
             except:
                 pass
 
+        cells = remove_doublets(cells)
+        
         # save list of all cells
         save_cells(
             cells=cells,

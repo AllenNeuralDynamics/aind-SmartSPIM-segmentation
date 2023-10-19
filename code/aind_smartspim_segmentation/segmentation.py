@@ -241,14 +241,6 @@ def cell_detection(
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 
-    processing_path = smartspim_config["metadata_path"].joinpath("processing.json")
-
-    utils.generate_processing(
-        data_processes=data_processes,
-        dest_processing=processing_path,
-        pipeline_version=__version__,
-    )
-
     return str(image_path)
 
 def merge(
@@ -459,6 +451,26 @@ def main(
         smartspim_config["cellfiner_params"]["voxel_sizes"],
         logger
     )
+    
+    processing_path = smartspim_config["metadata_path"].joinpath("processing.json")
+
+    utils.generate_processing(
+        data_processes=data_processes,
+        dest_processing=processing_path,
+        pipeline_version=__version__,
+    )
+    
+    # Getting tracked resources and plotting image
+    utils.stop_child_process(profile_process)
+
+    if len(time_points):
+        utils.generate_resources_graphs(
+            time_points,
+            cpu_percentages,
+            memory_usages,
+            smartspim_config["metadata_path"],
+            "smartspim_detection",
+        )
 
 if __name__ == "__main__":
     main()

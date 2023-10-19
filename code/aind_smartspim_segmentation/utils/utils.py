@@ -8,26 +8,31 @@ Created on Mon Nov 28 12:23:13 2022
 """
 
 import importlib
+import json
+import logging
+import multiprocessing
 import os
-from pathlib import Path
-from typing import List, Optional, Tuple, Union
+import platform
+import time
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 import dask
 import dask.array as da
 import numpy as np
-import skimage.io
+import matplotlib.pyplot as plt
+import psutil
 from aind_data_schema import Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
-from imlib.IO.cells import get_cells, save_cells
+from imlib.IO.cells import save_cells
 from photutils.background import Background2D
 from scipy import ndimage as ndi
 from scipy.signal import argrelmin, medfilt2d
 
 from .pymusica import musica
 
-from .._shared.types import Pathlike, ArrayLike
-
+from .._shared.types import PathLike, ArrayLike
 
 @dask.delayed
 def delay_astro(
@@ -125,7 +130,7 @@ def delay_astro(
                 bkg_estimator=est(),
                 fill_value=0.0,
                 sigma_clip=sigma_clip,
-                exclude_percentile=50,
+                exclude_percentile=100,
             )
 
         # subtract background and clip min to 0
@@ -337,7 +342,8 @@ def find_good_blocks(img, chunk, ds = 3):
 
     try:
         thresh = argrelmin(count, order = 10)[0][0]
-    except:
+    except IndexError:
+        thresh = 100
 
     img_binary = np.where(img >= thresh, 1, 0)
 

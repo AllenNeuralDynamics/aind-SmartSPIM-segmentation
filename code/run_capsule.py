@@ -6,7 +6,6 @@ in code ocean
 import os
 from pathlib import Path
 from typing import List, Tuple
-from glob import glob
 
 from aind_smartspim_segmentation import segmentation
 from aind_smartspim_fuse.params import get_yaml
@@ -131,7 +130,7 @@ def run():
 
     # It is assumed that these files
     # will be in the data folder
-    required_input_element = []
+    required_input_elements = []
 
     missing_files = validate_capsule_inputs(required_input_elements)
 
@@ -159,7 +158,7 @@ def run():
 
     smartspim_config["name"] = smartspim_dataset_name
 
-    image_path = segmentation.main(
+    segmentation.main(
         data_folder = Path(data_folder),
         output_segmented_folder = Path(results_folder),
         intermediate_segmented_folder = Path(scratch_folder),

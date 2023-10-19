@@ -12,6 +12,7 @@ import json
 import logging
 import multiprocessing
 import os
+from datetime import datetime
 from glob import glob
 from pathlib import Path
 
@@ -26,7 +27,6 @@ from ng_link import NgState
 from ng_link.ng_state import get_points_from_xml
 
 from .__init__ import __version__
-from .params import params
 from .utils import utils
 from ._shared.types import PathLike
 
@@ -129,8 +129,10 @@ def cell_detection(
     logger.info(f"Image to process: {image_path}")
 
     # load image data
-    signal_array = self.__read_zarr_image(image_path)
-    mask_array = self.__read_zarr_image(mask_path)
+    start_date_time = datetime.now()
+    signal_array = __read_zarr_image(image_path)
+    mask_array = __read_zarr_image(mask_path)
+    end_date_time = datetime.now()
 
     # remove extra dimensions
     signal_array = signal_array[0, 0, :, :, :]
@@ -140,7 +142,7 @@ def cell_detection(
         smartspim_config["end_plane"] = signal_array.shape[-3]
         
     logger.info(
-        f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
+        f"Starting detection with array {signal_array} with start in {smartspim_config['start_plane']} and end in {smartspim_config['end_plane']}"
     )
 
     data_processes.append(
@@ -194,7 +196,6 @@ def cell_detection(
     dask_report_file = f"{smartspim_config['metadata_path']}/dask_profile.html"
     with performance_report(filename=dask_report_file):
         count = 0
-        padding = smartspim_config["padding"]
         offload = len(blocks) // 2
         loop_chunks = [
             (blocks[:offload], offsets[:offload]),
@@ -204,38 +205,43 @@ def cell_detection(
         for lc in loop_chunks:
             results = []
             for block, offset in zip(*lc):
-                if smartspim_config["bkg_subtract"]:
-                    bkg_sub = utils.delay_astro(
-                        block,
-                        pad=smartspim_config["padding"],
-                        reflect=smartspim_config["cellfinder_params"]["soma_diameter"]
+                
+                if good_blocks[count]:
+                    if smartspim_config["bkg_subtract"]:
+                        bkg_sub = utils.delay_astro(
+                            block,
+                            pad=smartspim_config["padding"],
+                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"]
+                        )
+                    else:
+                        bkg_sub = utils.delay_preprocess(
+                            img=block, 
+                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"], 
+                            pad=smartspim_config["padding"]
+                        )
+
+                    cell_count = utils.delay_detect(
+                        bkg_sub,
+                        smartspim_config["metadata_path"],
+                        count,
+                        offset,
+                        smartspim_config["padding"] + smartspim_config["cellfinder_params"]["soma_diameter"],
+                        "block",
+                        smartspim_config["cellfinder_params"],
                     )
+
+                    count += 1
+
+                    results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
                 else:
-                    bkg_sub = utils.delay_preprocess(
-                        img=block, 
-                        reflect=smartspim_config["cellfinder_params"]["soma_diameter"], 
-                        pad=smartspim_config["padding"]
-                    )
-
-                cell_count = utils.delay_detect(
-                    bkg_sub,
-                    smartspim_config["metadata_path"],
-                    count,
-                    offset,
-                    smartspim_config["padding"] + smartspim_config["cellfinder_params"]["soma_diameter"],
-                    "block",
-                    smartspim_config["cellfinder_params"],
-                )
-
-                count += 1
-
-                results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
+                    count += 1
+                    
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
             cell_count_list = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 
-    processing_path = smartspim_config["metadata_path"]).joinpath("processing.json")
+    processing_path = smartspim_config["metadata_path"].joinpath("processing.json")
 
     utils.generate_processing(
         data_processes=data_processes,
@@ -245,7 +251,11 @@ def cell_detection(
 
     return str(image_path)
 
-def merge(metadata_path: Pathlike, save_path: Pathlike):
+def merge(
+    metadata_path: PathLike, 
+    save_path: PathLike,
+    logger: logging.Logger
+):
     """
     Saves list of all cells
     """
@@ -275,6 +285,7 @@ def generate_neuroglancer_link(
     detected_cells_path: str,
     output: str,
     voxel_sizes: list,
+    logger: logging.Logger
 ):
     """
     Generates neuroglancer link with the cell location
@@ -311,15 +322,6 @@ def generate_neuroglancer_link(
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
     utils.create_folder(output_precomputed)
     print(f"Output cells precomputed: {output_precomputed}")
-
-    if smartspim_config is None:
-        smartspim_config = get_smartspim_default_config()
-        logger.info(
-            f"""
-            Error while reading YAML.
-            Using default config {smartspim_config}
-            """
-        )
 
     logger.info(f"Image path in {image_path}")
     example_data = {
@@ -437,7 +439,11 @@ def main(
     )
 
     # merge block .xmls into single file
-    merge(smartspim_config["metadata_path"], smartspim_config["save_path"])
+    merge(
+        smartspim_config["metadata_path"], 
+        smartspim_config["save_path"],
+        logger
+    )
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(smartspim_config["save_path"], "detected_cells.xml")
@@ -446,11 +452,12 @@ def main(
     # create neuroglancer link
     generate_neuroglancer_link(
         image_path,
-        dataset_name,
+        smartspim_config['name'],
         smartspim_config["channel"],
         detected_cells_path,
         smartspim_config["save_path"],
         smartspim_config["cellfiner_params"]["voxel_sizes"],
+        logger
     )
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import List, Tuple
 
 from aind_smartspim_segmentation import segmentation
-from aind_smartspim_fuse.params import get_yaml
-from aind_smartspim_fuse.utils import utils
+from aind_smartspim_segmentation.params import get_yaml
+from aind_smartspim_segmentation.utils import utils
 
 def get_data_config(
     data_folder: str,

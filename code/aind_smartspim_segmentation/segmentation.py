@@ -241,7 +241,7 @@ def cell_detection(
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 
-    return str(image_path)
+    return str(image_path), data_processes
 
 def merge(
     metadata_path: PathLike, 
@@ -425,7 +425,7 @@ def main(
     profile_process.start()
 
     # run cell detection
-    image_path = cell_detection(
+    image_path, data_processes = cell_detection(
         smartspim_config=smartspim_config,
         logger=logger
     )

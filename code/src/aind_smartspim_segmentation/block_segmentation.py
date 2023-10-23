@@ -35,7 +35,8 @@ from .block_utils import (
     delay_detect,
     delay_preprocess,
     generate_processing,
-    remove_doublets
+    remove_doublets,
+    find_good_blocks
 )
 
 PathLike = Union[str, Path]
@@ -66,7 +67,7 @@ def get_smartspim_default_config() -> dict:
         "ball_xy_size": 8,
         "ball_overlap_fraction": 0.6,
         "log_sigma_size": 0.1,
-        "n_sds_above_mean_thresh": 5,
+        "n_sds_above_mean_thresh": 2,
         "soma_spread_factor": 1.4,
         "max_cluster_size": 100000,
     }
@@ -303,6 +304,10 @@ class Segment(ArgSchemaParser):
             f"{self.args['input_channel']}/{self.args['input_scale']}"
         )
 
+        mask_path = Path(self.args["input_data"]).joinpath(
+            f"{self.args['input_channel']}/3"
+        )
+
         print(f"Image path is set as: {image_path}")
 
         if not os.path.isdir(str(image_path)):
@@ -336,6 +341,10 @@ class Segment(ArgSchemaParser):
         logger.info(
             f"Starting detection with array {signal_array} with start in {signal_start} and end in {signal_end}"
         )
+        
+        # read mask path
+        mask_array = self.__read_zarr_image(mask_path)
+        mask_array = mask_array[0, 0, :, :, :]        
 
         # Setting up configuration
         smartspim_config["start_plane"] = signal_start
@@ -357,9 +366,12 @@ class Segment(ArgSchemaParser):
 
         # get into roughly 1000px chunks
         if self.args["chunk_size"] % 64 == 0:
-            chunk_step = 1024
+            chunk_step = 512
         elif self.args["chunk_size"] == 1 or self.args["chunk_size"] == 250:
-            chunk_step = 1000
+            chunk_step = 500
+
+        # get quality blocks using mask
+        good_blocks = find_good_blocks(mask_array, self.args['chunk_size'])
 
         logger.info(
             f"z-plane chunk size: {self.args['chunk_size']}. Processing with chunk size: {chunk_step}."
@@ -399,31 +411,41 @@ class Segment(ArgSchemaParser):
             for lc in loop_chunks:
                 results = []
                 for block, offset in zip(*lc):
-                    if self.args["bkg_subtract"]:
-                        bkg_sub = delay_astro(
-                            block, pad=padding, reflect=smartspim_config["soma_diameter"]
+
+                    if good_blocks[count]:
+                    
+                        if self.args['bkg_subtract']:
+                            bkg_sub = astro_preprocess(
+                                block,
+                                pad = padding,
+                                reflect = smartspim_config['soma_diameter']
+                            )
+                        else:
+                            bkg_sub = delay_preprocess(
+                                block, 
+                                reflect = smartspim_config['soma_diameter'],
+                                pad = padding
+                            )
+
+                        cell_count = delay_detect(
+                            bkg_sub,
+                            self.args["metadata_path"],
+                            count,
+                            offset,
+                            padding + smartspim_config['soma_diameter'],
+                            'block',
+                            smartspim_config
                         )
+
+                        count += 1
+
+                        results.append(da.from_delayed(cell_count[1], shape = (1, ), dtype = int))
                     else:
-                        bkg_sub = delay_preprocess(
-                            img=block, reflect=smartspim_config["soma_diameter"], pad=padding
-                        )
+                        count += 1
 
-                    cell_count = delay_detect(
-                        bkg_sub,
-                        self.args["metadata_path"],
-                        count,
-                        offset,
-                        padding + smartspim_config["soma_diameter"],
-                        "block",
-                        smartspim_config,
-                    )
-
-                    count += 1
-
-                    results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
-                arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
+                arr = da.concatenate(results, axis = 0, allow_unknown_chunksizes = True)
                 cell_count_list = arr.compute()
-                logger.info("Reseting client to try to avoid memory issues.")
+                print('Reseting client to try to avoid memory issues.')
                 client.restart()
 
         processing_path = Path(self.args["metadata_path"]).joinpath("processing.json")

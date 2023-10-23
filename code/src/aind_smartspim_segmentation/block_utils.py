@@ -310,6 +310,72 @@ def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, coun
 
     return len(cells)
 
+def find_good_blocks(img, chunk, ds = 3):
+    '''
+    Function to Identify good blocks to process
+    using downsampled zarr
+
+    Parameters
+    ----------
+    img : da.array
+        dask array of low resolution image
+    chunk : int
+        chunk size used for cell detection
+    ds : int
+        the factor by which the array is downsampled
+
+    Returns
+    -------
+    block_dict : dict
+        dictionary with information on which blocks to
+        process. key = block number and value = bool
+
+    '''
+    if isinstance(img, dask.array.core.Array):
+        img = np.asarray(img)
+        
+    img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)    
+    count, bin_count = np.histogram(img.astype("uint16"), bins = 2**16, range = (0, 2**16), density = True)
+    thresh = argrelmin(count, order = 10)[0][0]
+    img_binary = np.where(img >= thresh, 1, 0)
+
+    print(f"Threshold identified at: {thresh}")
+
+    cz = int(chunk / 2**ds)
+    dims = list(img_binary.shape)
+    counts = [int(np.ceil(d / cz)) for d in dims]
+    
+    b = 0
+    block_dict = {}
+    for z in range(counts[0]):
+        z_l, z_u = z * cz, (z + 1) * cz
+        if z_u > dims[0] - 1:
+            z_u = dims[0] - 1
+        for y in range(counts[1]):
+            y_l, y_u = y * cz, (y + 1) * cz
+            if y_u > dims[1] - 1:
+                y_u = dims[1] - 1
+            for x in range(counts[2]):
+                x_l, x_u = x * cz, (x + 1) * cz
+                if x_u > dims[2] - 1:
+                    x_u = dims[2] - 1
+                
+                
+                block = img_binary[
+                    z_l:z_u,
+                    y_l:y_u,
+                    x_l:x_u,
+                    ]
+                
+                if np.sum(block) > 0:
+                    block_dict[b] = True
+                else:
+                    block_dict[b] = False
+                    
+                b += 1
+                    
+    return block_dict
+
 def remove_doublets(cells, dist = 7):
     '''
     Function to find and remove doublets

@@ -373,6 +373,11 @@ class Segment(ArgSchemaParser):
         # get quality blocks using mask
         good_blocks = find_good_blocks(mask_array, self.args['chunk_size'])
 
+        kept_blocks = sum(good_blocks.values())
+        all_blocks = len(good_blocks.values())
+
+        print(f"Total blocks: {all blocks} \n Processing blocks: {kept_blocks}")
+
         logger.info(
             f"z-plane chunk size: {self.args['chunk_size']}. Processing with chunk size: {chunk_step}."
         )

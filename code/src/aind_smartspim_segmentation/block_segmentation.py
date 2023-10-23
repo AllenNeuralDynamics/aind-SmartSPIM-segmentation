@@ -387,7 +387,7 @@ class Segment(ArgSchemaParser):
         logger.info(f"There are {len(blocks)} delayed blocks to process.")
 
         logger.info(f"Running background subtraction and segmentation with array {signal_array}")
-        dask_workers = 8
+        dask_workers = 16
         # start client
         cluster = LocalCluster(
             n_workers=dask_workers,

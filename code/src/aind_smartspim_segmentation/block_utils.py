@@ -23,7 +23,7 @@ from cellfinder_core.detect import detect
 from imlib.IO.cells import get_cells, save_cells
 from photutils.background import Background2D
 from scipy import ndimage as ndi
-from scipy.signal import medfilt2d
+from scipy.signal import medfilt2d, argrelmin
 from scipy.spatial import KDTree
 
 from .pymusica import musica

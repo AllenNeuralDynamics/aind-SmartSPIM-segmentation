@@ -13,7 +13,7 @@ from aind_smartspim_segmentation.utils import utils
 
 def get_data_config(
     data_folder: str,
-    processing_manifest_path: str = "processing_manifest.json",
+    processing_manifest_path: str = "processing_manifest_*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
     """
@@ -46,7 +46,7 @@ def get_data_config(
     # a single dataset in the pipeline
 
     derivatives_dict = utils.read_json_as_dict(
-        f"{data_folder}/{processing_manifest_path}"
+        glob(f"{data_folder}/{processing_manifest_path}")[0]
     )
     data_description_dict = utils.read_json_as_dict(
         f"{data_folder}/{data_description_path}"

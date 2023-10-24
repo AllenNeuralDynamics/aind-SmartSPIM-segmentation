@@ -6,6 +6,7 @@ in code ocean
 import os
 from pathlib import Path
 from typing import List, Tuple
+from glob import glob
 
 from aind_smartspim_segmentation import segmentation
 from aind_smartspim_segmentation.params import get_yaml

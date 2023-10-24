@@ -420,7 +420,7 @@ class Segment(ArgSchemaParser):
                     if good_blocks[count]:
                     
                         if self.args['bkg_subtract']:
-                            bkg_sub = astro_preprocess(
+                            bkg_sub = delay_astro(
                                 block,
                                 pad = padding,
                                 reflect = smartspim_config['soma_diameter']

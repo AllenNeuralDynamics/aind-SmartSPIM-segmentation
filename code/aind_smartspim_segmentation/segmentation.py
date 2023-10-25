@@ -369,8 +369,7 @@ def generate_neuroglancer_link(
 
 def main(
     data_folder: PathLike,
-    transforms_xml_path: PathLike,
-    output_segmented_path: PathLike,
+    output_segmented_folder: PathLike,
     intermediate_segmented_folder: PathLike,
     smartspim_config: dict
 ):
@@ -382,7 +381,7 @@ def main(
     data_folder: PathLike
         Path where the image data is located
 
-    output_segmented_path: PathLike
+    output_segmented_folder: PathLike
         Path where the OMEZarr and metadata will
         live after fusion
 

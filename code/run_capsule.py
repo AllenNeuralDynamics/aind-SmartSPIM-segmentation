@@ -86,9 +86,9 @@ def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
     default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
     default_config["channel"] = pipeline_config['segmentation']['channel']
     default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
-    default_config["chunk_size"] = pipeline_config["segmentation"]["chunksize"]
-    default_config["cellfinder_params"]["start_plane"] = pipeline_config["segmentation"]["signal_start"]
-    default_config["cellfinder_params"]["end_plane"] = pipeline_config["segmentation"]["signal_end"]
+    default_config["chunk_size"] = int(pipeline_config["segmentation"]["chunksize"])
+    default_config["cellfinder_params"]["start_plane"] = int(pipeline_config["segmentation"]["signal_start"])
+    default_config["cellfinder_params"]["end_plane"] = int(pipeline_config["segmentation"]["signal_end"])
 
     return default_config
 

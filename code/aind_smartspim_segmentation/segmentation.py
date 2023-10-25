@@ -138,8 +138,8 @@ def cell_detection(
     signal_array = signal_array[0, 0, :, :, :]
     mask_array = mask_array[0, 0, :, :, :]
 
-    if smartspim_config["end_plane"] == -1:
-        smartspim_config["end_plane"] = signal_array.shape[-3]
+    if smartspim_config["cellfinder_params"]["end_plane"] == -1:
+        smartspim_config["cellfinder_params"]["end_plane"] = signal_array.shape[-3]
         
     logger.info(
         f"Starting detection with array {signal_array} with start in {smartspim_config['start_plane']} and end in {smartspim_config['end_plane']}"

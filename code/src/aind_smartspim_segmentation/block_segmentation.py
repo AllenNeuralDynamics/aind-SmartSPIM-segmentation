@@ -555,7 +555,7 @@ def generate_neuroglancer_link(
 
     json_state["layers"][0][
         "source"
-    ] = f"zarr://s3://{bucket_path}/{dataset_name[0]}/image_tile_fusing/OMEZarr/{channel_name}.zarr"
+    ] = f"zarr://s3://{bucket_path}/{dataset_name}/image_tile_fusing/OMEZarr/{channel_name}.zarr"
 
 
     json_state["layers"][1][

@@ -494,7 +494,7 @@ def generate_neuroglancer_link(
     channel_name: str,
     detected_cells_path: str,
     output: str,
-    config_file_path: str
+    config_file_path: str,
 ):
     """
     Generates neuroglancer link with the cell location
@@ -504,6 +504,13 @@ def generate_neuroglancer_link(
     -----------
     image_path: str
         Path to the zarr file
+
+    dataset_name: str
+        Dataset name where the data will be stored
+        in the cloud. Follows SmartSPIM_***_stitched_***
+
+    channel_name: str
+        Channel name that was processed
 
     detected_cells_path: str
         Path to the detected cells
@@ -578,6 +585,11 @@ def generate_neuroglancer_link(
         "ng_link"
     ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
 
+    json_state["layers"][0][
+        "source"
+    ] = f"zarr://s3://{bucket_path}/{dataset_name}/image_tile_fusing/OMEZarr/{channel_name}.zarr"
+
+
     json_state["layers"][1][
         "source"
     ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/precomputed"
@@ -617,18 +629,19 @@ def main(dataset_name: str, input_config: dict):
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(default_params["save_path"], "detected_cells.xml")
-    
+
     image_path = os.path.abspath(f"{default_params['input_data']}/{default_params['input_channel']}")
-    
     logger.info(f"Image path to generate the neuroglancer link: {image_path}")
-    logger.info(f"Dataset name: {dataset_name} with channel {input_config['segmentation']['channel']}")
+    logger.info(
+        f"Dataset name: {dataset_name} with channel {input_config['segmentation']['channel']}"
+    )
     generate_neuroglancer_link(
         image_path,
         dataset_name,
-        input_config['segmentation']['channel'],
+        input_config["segmentation"]["channel"],
         detected_cells_path,
         default_params["save_path"],
-        default_params["config_file"]
+        default_params["config_file"],
     )
 
     return image_path

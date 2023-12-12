@@ -367,7 +367,7 @@ class Segment(ArgSchemaParser):
         # get into roughly 1000px chunks
         if self.args["chunk_size"] % 64 == 0:
             chunk_step = 512
-        elif self.args["chunk_size"] == 1 or self.args["chunk_size"] == 250:
+        elif self.args["chunk_size"] == 1 or self.args["chunk_size"] % 250 == 0:
             chunk_step = 500
 
         # get quality blocks using mask

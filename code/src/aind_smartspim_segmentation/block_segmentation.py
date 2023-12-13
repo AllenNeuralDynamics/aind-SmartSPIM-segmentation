@@ -18,6 +18,7 @@ from typing import Union
 
 import dask
 import dask.array as da
+import numpy as np
 import yaml
 from aind_data_schema.processing import DataProcess
 from argschema import ArgSchema, ArgSchemaParser, InputFile

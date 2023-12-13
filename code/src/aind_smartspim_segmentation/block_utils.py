@@ -310,7 +310,7 @@ def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, coun
 
     return len(cells)
 
-def find_good_blocks(img, counts, chunk, ds):
+def find_good_blocks(img, counts, chunk, ds = 3):
     '''
     Function to Identify good blocks to process
     using downsampled zarr.

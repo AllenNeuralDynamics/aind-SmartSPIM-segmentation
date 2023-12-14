@@ -372,7 +372,7 @@ class Segment(ArgSchemaParser):
             chunk_step = 500
 
         # get quality blocks using mask
-        chunks = [np.ceil(x / chunk_step) for x in signal_array.shape]
+        chunks = [int(np.ceil(x / chunk_step)) for x in signal_array.shape]
         good_blocks = find_good_blocks(mask_array, chunks, chunk_step)
 
         kept_blocks = sum(good_blocks.values())

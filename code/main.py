@@ -123,7 +123,7 @@ def main():
     """
 
     data_folder = os.path.abspath("../data/")
-    processing_manifest_path = glob(f"{data_folder}/processing_manifest_*")[0]
+    processing_manifest_path = glob(f"{data_folder}/segmentation_processing_manifest*.json*")[0]
     data_description_path = f"{data_folder}/data_description.json"
 
     if not os.path.exists(processing_manifest_path):

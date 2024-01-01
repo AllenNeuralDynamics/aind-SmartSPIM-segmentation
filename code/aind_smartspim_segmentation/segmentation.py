@@ -18,6 +18,7 @@ from pathlib import Path
 
 import dask
 import dask.array as da
+import numpy as np
 from aind_data_schema.processing import DataProcess
 
 from dask.distributed import Client, LocalCluster, performance_report
@@ -162,7 +163,7 @@ def cell_detection(
     # get into roughly 500px chunks
     if smartspim_config["chunk_size"] % 64 == 0:
         chunk_step = 512
-    elif smartspim_config["chunk_size"] == 1 or smartspim_config["chunk_size"] == 250:
+    elif smartspim_config["chunk_size"] == 1 or smartspim_config["chunk_size"] % 250 == 0:
         chunk_step = 500
 
     logger.info(
@@ -170,7 +171,13 @@ def cell_detection(
     )
 
     # get quality blocks using mask
-    good_blocks = utils.find_good_blocks(mask_array, chunk_step, smartspim_config["mask_scale"])
+    chunks = [int(np.ceil(x / chunk_step)) for x in signal_array.shape]
+    good_blocks = utils.find_good_blocks(
+        mask_array, 
+        chunks, 
+        chunk_step, 
+        smartspim_config["mask_scale"]
+    )
 
     rechunk_size = [axis * (chunk_step // axis) for axis in signal_array.chunksize]
     signal_array = signal_array.rechunk(tuple(rechunk_size))

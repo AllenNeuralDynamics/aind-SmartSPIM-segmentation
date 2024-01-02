@@ -19,10 +19,10 @@ from typing import List, Optional, Tuple
 
 import dask
 import dask.array as da
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import psutil
-from aind_data_schema import Processing
+from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
 from imlib.IO.cells import save_cells
@@ -30,9 +30,9 @@ from photutils.background import Background2D
 from scipy import ndimage as ndi
 from scipy.signal import argrelmin, medfilt2d
 
+from .._shared.types import ArrayLike, PathLike
 from .pymusica import musica
 
-from .._shared.types import PathLike, ArrayLike
 
 @dask.delayed
 def delay_astro(
@@ -272,7 +272,7 @@ def delay_plane_stats(plane: ArrayLike, log_sigma_size: int, soma_diameter: floa
         plane = plane / maxima
 
     # To leave room to label in the 3d detection.
-    plane = plane * (2**16 - 3)
+    plane = plane * (2 ** 16 - 3)
 
     return np.array([count, maxima, plane.ravel().mean(), plane.ravel().std()])
 
@@ -313,8 +313,9 @@ def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, coun
 
     return len(cells)
 
-def find_good_blocks(img, counts, chunk, ds = 3):
-    '''
+
+def find_good_blocks(img, counts, chunk, ds=3):
+    """
     Function to Identify good blocks to process
     using downsampled zarr
 
@@ -335,29 +336,31 @@ def find_good_blocks(img, counts, chunk, ds = 3):
         dictionary with information on which blocks to
         process. key = block number and value = bool
 
-    '''
+    """
     if isinstance(img, dask.array.core.Array):
         img = np.asarray(img)
-        
-    img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)    
-    count, bin_count = np.histogram(img.astype("uint16"), bins = 2**16, range = (0, 2**16), density = True)
+
+    img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
+    count, bin_count = np.histogram(
+        img.astype("uint16"), bins=2 ** 16, range=(0, 2 ** 16), density=True
+    )
 
     try:
-        thresh = argrelmin(count, order = 10)[0][0]
+        thresh = argrelmin(count, order=10)[0][0]
     except IndexError:
         thresh = 100
 
     img_binary = np.where(img >= thresh, 1, 0)
 
-    cz = int(chunk / 2**ds)
+    cz = int(chunk / 2 ** ds)
     dims = list(img_binary.shape)
-    
+
     b = 0
     block_dict = {}
 
-    ''' there are rare occasions where the level 0 and
+    """ there are rare occasions where the level 0 and
     level 3 array disagree on chuncks so have some
-    catches to account for that '''
+    catches to account for that """
     for z in range(counts[0]):
         z_l, z_u = z * cz, (z + 1) * cz
         if z_l > dims[0] - 1:
@@ -376,22 +379,22 @@ def find_good_blocks(img, counts, chunk, ds = 3):
                     x_l = dims[2] - 2
                 if x_u > dims[2] - 1:
                     x_u = dims[2] - 1
-                
-                
+
                 block = img_binary[
                     z_l:z_u,
                     y_l:y_u,
                     x_l:x_u,
-                    ]
-                
+                ]
+
                 if np.sum(block) > 0:
                     block_dict[b] = True
                 else:
                     block_dict[b] = False
-                    
+
                 b += 1
-                    
+
     return block_dict
+
 
 def create_logger(output_log_path: PathLike):
     """
@@ -431,6 +434,7 @@ def create_logger(output_log_path: PathLike):
 
     return logger
 
+
 def read_json_as_dict(filepath: str):
     """
     Reads a json as dictionary.
@@ -457,6 +461,7 @@ def read_json_as_dict(filepath: str):
 
     return dictionary
 
+
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
     """
     Create new folders.
@@ -481,34 +486,50 @@ def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
             if e.errno != os.errno.EEXIST:
                 raise
 
+
 def generate_processing(
-    data_processes: List[dict],
+    data_processes: List[DataProcess],
     dest_processing: PathLike,
+    processor_full_name: str,
     pipeline_version: str,
 ):
     """
     Generates data description for the output folder.
+
     Parameters
     ------------------------
+
     data_processes: List[dict]
         List with the processes aplied in the pipeline.
+
     dest_processing: PathLike
         Path where the processing file will be placed.
+
+    processor_full_name: str
+        Person in charged of running the pipeline
+        for this data asset
+
     pipeline_version: str
         Terastitcher pipeline version
-    """
 
+    """
     # flake8: noqa: E501
-    processing = Processing(
-        pipeline_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-        pipeline_version=pipeline_version,
+    processing_pipeline = PipelineProcess(
         data_processes=data_processes,
+        processor_full_name=processor_full_name,
+        pipeline_version=pipeline_version,
+        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
+        note="Metadata for segmentation step",
     )
 
-    with open(dest_processing, "w") as f:
-        f.write(processing.json(indent=3))
-    
-    return
+    processing = Processing(
+        processing_pipeline=processing_pipeline,
+        notes="This processing only contains metadata of cell segmentation \
+            and needs to be compiled with other steps at the end",
+    )
+
+    processing.write_standard_file(output_directory=dest_processing)
+
 
 def profile_resources(
     time_points: List,
@@ -551,6 +572,7 @@ def profile_resources(
         memory_usages.append(memory_info.percent)
 
         time.sleep(monitoring_interval)
+
 
 def generate_resources_graphs(
     time_points: List,
@@ -624,6 +646,7 @@ def stop_child_process(process: multiprocessing.Process):
     process.terminate()
     process.join()
 
+
 def get_size(bytes, suffix: str = "B") -> str:
     """
     Scale bytes to its proper format
@@ -644,6 +667,7 @@ def get_size(bytes, suffix: str = "B") -> str:
         if bytes < factor:
             return f"{bytes:.2f}{unit}{suffix}"
         bytes /= factor
+
 
 def print_system_information(logger: logging.Logger):
     """
@@ -670,9 +694,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"{sep} Boot Time {sep}")
     boot_time_timestamp = psutil.boot_time()
     bt = datetime.fromtimestamp(boot_time_timestamp)
-    logger.info(
-        f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
-    )
+    logger.info(f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}")
 
     # CPU info
     logger.info(f"{sep} CPU Info {sep}")

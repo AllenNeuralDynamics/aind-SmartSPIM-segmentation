@@ -110,14 +110,12 @@ def read_image_directory_structure(folder_dir: PathLike) -> dict:
                 rows = natsorted(os.listdir(possible_col))
 
                 for row in rows:
-                    possible_row = (
-                        channel_paths[channel_idx].joinpath(col).joinpath(row)
-                    )
+                    possible_row = channel_paths[channel_idx].joinpath(col).joinpath(row)
 
                     if os.path.isdir(possible_row):
-                        directory_structure[channel_paths[channel_idx]][col][
-                            row
-                        ] = natsorted(os.listdir(possible_row))
+                        directory_structure[channel_paths[channel_idx]][col][row] = natsorted(
+                            os.listdir(possible_row)
+                        )
 
     return directory_structure
 
@@ -210,9 +208,9 @@ def fix_image_diff_dims(
             return new_arr
 
         n_pad = tuple(tuple((0, dim)) for dim in zeros_dim)
-        new_arr = pad(
-            new_arr, pad_width=n_pad, mode="constant", constant_values=0
-        ).rechunk(chunksize)
+        new_arr = pad(new_arr, pad_width=n_pad, mode="constant", constant_values=0).rechunk(
+            chunksize
+        )
 
     return new_arr
 
@@ -351,14 +349,10 @@ def read_chunked_stitched_image_per_channel(
                     dtype = None
 
                 try:
-                    slice_name = directory_structure[channel_name][row_name][
-                        column_name
-                    ][slice_pos]
+                    slice_name = directory_structure[channel_name][row_name][column_name][slice_pos]
 
                     filepath = str(
-                        channel_name.joinpath(row_name)
-                        .joinpath(column_name)
-                        .joinpath(slice_name)
+                        channel_name.joinpath(row_name).joinpath(column_name).joinpath(slice_name)
                     )
 
                     new_arr = lazy_tiff_reader(filepath, dtype=dtype, shape=shape)
@@ -477,9 +471,7 @@ def channel_parallel_reading(
 
     else:
         images_per_worker = n_images // workers
-        print(
-            f"Setting workers to {workers} - {images_per_worker} - total images: {n_images}"
-        )
+        print(f"Setting workers to {workers} - {images_per_worker} - total images: {n_images}")
 
         # Getting 5 dim image TCZYX
         args = []

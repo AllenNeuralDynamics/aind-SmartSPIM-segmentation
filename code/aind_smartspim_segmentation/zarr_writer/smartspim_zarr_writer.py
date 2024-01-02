@@ -13,6 +13,7 @@ from typing import Dict, Hashable, List, Optional, Sequence, Tuple, Union, cast
 
 import dask
 import dask.array as da
+
 # import matplotlib.pyplot as plt
 import numpy as np
 import pims
@@ -21,6 +22,7 @@ import zarr
 from dask.array.core import Array
 from dask.base import tokenize
 from dask.distributed import Client, LocalCluster, performance_report
+
 # from distributed import wait
 from numcodecs import blosc
 from ome_zarr.format import CurrentFormat
@@ -174,9 +176,7 @@ def _compute_scales(
                 ]
             )
             if translation is not None:
-                transforms[-1].append(
-                    {"type": "translation", "translation": translation}
-                )
+                transforms[-1].append({"type": "translation", "translation": translation})
             lastz = int(np.ceil(lastz / scale_factor[0]))
             lasty = int(np.ceil(lasty / scale_factor[1]))
             lastx = int(np.ceil(lastx / scale_factor[2]))
@@ -194,9 +194,7 @@ def _compute_scales(
     return transforms, chunk_sizes
 
 
-def _get_axes_5d(
-    time_unit: str = "millisecond", space_unit: str = "micrometer"
-) -> List[Dict]:
+def _get_axes_5d(time_unit: str = "millisecond", space_unit: str = "micrometer") -> List[Dict]:
     """Generate the list of axes.
 
     Parameters
@@ -281,9 +279,7 @@ def write_ome_ngff_metadata(
     coordinate_transformations, chunk_opts = _compute_scales(
         n_lvls, scale_factors, voxel_size, arr.chunksize, arr.shape, None
     )
-    fmt.validate_coordinate_transformations(
-        arr.ndim, n_lvls, coordinate_transformations
-    )
+    fmt.validate_coordinate_transformations(arr.ndim, n_lvls, coordinate_transformations)
     # Setting coordinate transfomations
     datasets = [{"path": str(i)} for i in range(n_lvls)]
     if coordinate_transformations is not None:
@@ -313,11 +309,7 @@ def create_smartspim_opts(codec: str, compression_level: int) -> dict:
         Dictionary with the blosc compression
         to write the SmartSPIM image
     """
-    return {
-        "compressor": blosc.Blosc(
-            cname=codec, clevel=compression_level, shuffle=blosc.SHUFFLE
-        )
-    }
+    return {"compressor": blosc.Blosc(cname=codec, clevel=compression_level, shuffle=blosc.SHUFFLE)}
 
 
 def _get_pyramid_metadata():
@@ -553,9 +545,7 @@ def smartspim_channel_zarr_writer(
     image_data = pad_array_n_d(arr=image_data)
 
     # Compression options
-    writing_options = create_smartspim_opts(
-        codec=codec, compression_level=compression_level
-    )
+    writing_options = create_smartspim_opts(codec=codec, compression_level=compression_level)
 
     # Creating Zarr dataset
     store = parse_url(path=output_path, mode="w").store
@@ -622,9 +612,7 @@ def smartspim_channel_zarr_writer(
 
         # Writing zarr
         block_shape = list(
-            BlockedArrayWriter.get_block_shape(
-                arr=image_data, target_size_mb=12800  # 51200,
-            )
+            BlockedArrayWriter.get_block_shape(arr=image_data, target_size_mb=12800)  # 51200,
         )
 
         # Formatting to 5D block shape

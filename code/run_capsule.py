@@ -4,13 +4,14 @@ in code ocean
 """
 
 import os
+from glob import glob
 from pathlib import Path
 from typing import List, Tuple
-from glob import glob
 
 from aind_smartspim_segmentation import segmentation
 from aind_smartspim_segmentation.params import get_yaml
 from aind_smartspim_segmentation.utils import utils
+
 
 def get_data_config(
     data_folder: str,
@@ -46,16 +47,13 @@ def get_data_config(
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
 
-    derivatives_dict = utils.read_json_as_dict(
-        glob(f"{data_folder}/{processing_manifest_path}")[0]
-    )
-    data_description_dict = utils.read_json_as_dict(
-        f"{data_folder}/{data_description_path}"
-    )
+    derivatives_dict = utils.read_json_as_dict(glob(f"{data_folder}/{processing_manifest_path}")[0])
+    data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]
 
     return derivatives_dict, smartspim_dataset
+
 
 def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
     """
@@ -84,13 +82,18 @@ def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
     """
 
     default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
-    default_config["channel"] = pipeline_config['segmentation']['channel']
+    default_config["channel"] = pipeline_config["segmentation"]["channel"]
     default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
     default_config["chunk_size"] = int(pipeline_config["segmentation"]["chunksize"])
-    default_config["cellfinder_params"]["start_plane"] = int(pipeline_config["segmentation"]["signal_start"])
-    default_config["cellfinder_params"]["end_plane"] = int(pipeline_config["segmentation"]["signal_end"])
+    default_config["cellfinder_params"]["start_plane"] = int(
+        pipeline_config["segmentation"]["signal_start"]
+    )
+    default_config["cellfinder_params"]["end_plane"] = int(
+        pipeline_config["segmentation"]["signal_end"]
+    )
 
     return default_config
+
 
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """
@@ -118,6 +121,7 @@ def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
 
     return missing_inputs
 
+
 def run():
     """
     Main function to execute the smartspim segmentation
@@ -136,9 +140,7 @@ def run():
     missing_files = validate_capsule_inputs(required_input_elements)
 
     if len(missing_files):
-        raise ValueError(
-            f"We miss the following files in the capsule input: {missing_files}"
-        )
+        raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
     pipeline_config, smartspim_dataset_name = get_data_config(data_folder=data_folder)
 
@@ -149,8 +151,12 @@ def run():
 
     # add paths to default_config
     default_config["input_data"] = f"{data_folder}/{pipeline_config['segmentation']['input_data']}"
-    default_config["save_path"] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"
-    default_config["metadata_path"] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}/metadata"
+    default_config[
+        "save_path"
+    ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"
+    default_config[
+        "metadata_path"
+    ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}/metadata"
 
     # combine configs
     smartspim_config = set_up_pipeline_parameters(
@@ -160,11 +166,12 @@ def run():
     smartspim_config["name"] = smartspim_dataset_name
 
     segmentation.main(
-        data_folder = Path(data_folder),
-        output_segmented_folder = Path(results_folder),
-        intermediate_segmented_folder = Path(scratch_folder),
-        smartspim_config = smartspim_config
+        data_folder=Path(data_folder),
+        output_segmented_folder=Path(results_folder),
+        intermediate_segmented_folder=Path(scratch_folder),
+        smartspim_config=smartspim_config,
     )
+
 
 if __name__ == "__main__":
     run()

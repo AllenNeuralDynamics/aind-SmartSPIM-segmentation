@@ -19,8 +19,7 @@ from pathlib import Path
 import dask
 import dask.array as da
 import numpy as np
-from aind_data_schema.processing import DataProcess
-
+from aind_data_schema.core.processing import DataProcess, ProcessName
 from dask.distributed import Client, LocalCluster, performance_report
 from imlib.IO.cells import get_cells, save_cells
 from natsort import natsorted
@@ -28,8 +27,8 @@ from ng_link import NgState
 from ng_link.ng_state import get_points_from_xml
 
 from .__init__ import __version__
-from .utils import utils
 from ._shared.types import PathLike
+from .utils import utils
 
 
 def set_up_dask_config(tmp_folder: PathLike):
@@ -79,8 +78,9 @@ def __read_zarr_image(image_path: PathLike):
 
     image_path = str(image_path)
     signal_array = da.from_zarr(image_path)
-    
+
     return signal_array
+
 
 def calculate_offsets(blocks, chunk_size):
     """
@@ -113,11 +113,9 @@ def calculate_offsets(blocks, chunk_size):
                 )
     return offsets
 
-def cell_detection(
-    smartspim_config: dict,
-    logger: logging.Logger
-):
-    
+
+def cell_detection(smartspim_config: dict, logger: logging.Logger):
+
     image_path = Path(smartspim_config["input_data"]).joinpath(
         f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"
     )
@@ -141,24 +139,28 @@ def cell_detection(
 
     if smartspim_config["cellfinder_params"]["end_plane"] == -1:
         smartspim_config["cellfinder_params"]["end_plane"] = signal_array.shape[-3]
-        
+
     logger.info(
         f"Starting detection with array {signal_array} with start in {smartspim_config['cellfinder_params']['start_plane']} and end in {smartspim_config['cellfinder_params']['end_plane']}"
     )
 
     data_processes.append(
         DataProcess(
-            name="Image importing",
-            version=__version__,
+            name=ProcessName.IMAGE_IMPORTING,
+            software_version=__version__,
             start_date_time=start_date_time,
             end_date_time=end_date_time,
             input_location=str(image_path),
             output_location=str(image_path),
+            outputs={},
             code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
+            code_version=__version__,
             parameters={},
-            notes="Importing stitched data for cell segmentation",
+            notes="Importing fused data for cell segmentation",
         )
     )
+
+    start_date_time = datetime.now()
 
     # get into roughly 500px chunks
     if smartspim_config["chunk_size"] % 64 == 0:
@@ -173,10 +175,7 @@ def cell_detection(
     # get quality blocks using mask
     chunks = [int(np.ceil(x / chunk_step)) for x in signal_array.shape]
     good_blocks = utils.find_good_blocks(
-        mask_array, 
-        chunks, 
-        chunk_step, 
-        smartspim_config["mask_scale"]
+        mask_array, chunks, chunk_step, smartspim_config["mask_scale"]
     )
 
     rechunk_size = [axis * (chunk_step // axis) for axis in signal_array.chunksize]
@@ -212,19 +211,19 @@ def cell_detection(
         for lc in loop_chunks:
             results = []
             for block, offset in zip(*lc):
-                
+
                 if good_blocks[count]:
                     if smartspim_config["bkg_subtract"]:
                         bkg_sub = utils.delay_astro(
                             block,
                             pad=smartspim_config["padding"],
-                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"]
+                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
                         )
                     else:
                         bkg_sub = utils.delay_preprocess(
-                            img=block, 
-                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"], 
-                            pad=smartspim_config["padding"]
+                            img=block,
+                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
+                            pad=smartspim_config["padding"],
                         )
 
                     cell_count = utils.delay_detect(
@@ -232,7 +231,8 @@ def cell_detection(
                         smartspim_config["metadata_path"],
                         count,
                         offset,
-                        smartspim_config["padding"] + smartspim_config["cellfinder_params"]["soma_diameter"],
+                        smartspim_config["padding"]
+                        + smartspim_config["cellfinder_params"]["soma_diameter"],
                         "block",
                         smartspim_config["cellfinder_params"],
                     )
@@ -242,19 +242,39 @@ def cell_detection(
                     results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
                 else:
                     count += 1
-                    
+
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
             cell_count_list = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 
+    end_date_time = datetime.now()
+
+    data_processes.append(
+        DataProcess(
+            name=ProcessName.IMAGE_CELL_SEGMENTATION,
+            software_version=__version__,
+            start_date_time=start_date_time,
+            end_date_time=end_date_time,
+            input_location=str(image_path),
+            output_location=str(smartspim_config["metadata_path"]),
+            outputs={},
+            code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
+            code_version=__version__,
+            parameters={
+                "chunk_step": chunk_step,
+                "image_path": str(image_path),
+                "mask_path": str(mask_path),
+                "smartspim_cell_config": smartspim_config,
+            },
+            notes=f"Segmenting channel in path: {image_path}",
+        )
+    )
+
     return str(image_path), data_processes
 
-def merge(
-    metadata_path: PathLike, 
-    save_path: PathLike,
-    logger: logging.Logger
-):
+
+def merge(metadata_path: PathLike, save_path: PathLike, logger: logging.Logger):
     """
     Saves list of all cells
     """
@@ -284,7 +304,7 @@ def generate_neuroglancer_link(
     detected_cells_path: str,
     output: str,
     voxel_sizes: list,
-    logger: logging.Logger
+    logger: logging.Logger,
 ):
     """
     Generates neuroglancer link with the cell location
@@ -311,7 +331,7 @@ def generate_neuroglancer_link(
 
     voxel_sizes: list
         list of um per voxel along each dimension
-        ordered [z, y, x] 
+        ordered [z, y, x]
     """
 
     logger.info(f"Reading cells from {detected_cells_path}")
@@ -378,7 +398,7 @@ def main(
     data_folder: PathLike,
     output_segmented_folder: PathLike,
     intermediate_segmented_folder: PathLike,
-    smartspim_config: dict
+    smartspim_config: dict,
 ):
     """
     This function detects cells
@@ -431,41 +451,35 @@ def main(
     profile_process.start()
 
     # run cell detection
-    image_path, data_processes = cell_detection(
-        smartspim_config=smartspim_config,
-        logger=logger
-    )
+    image_path, data_processes = cell_detection(smartspim_config=smartspim_config, logger=logger)
 
     # merge block .xmls into single file
-    merge(
-        smartspim_config["metadata_path"], 
-        smartspim_config["save_path"],
-        logger
-    )
+    merge(smartspim_config["metadata_path"], smartspim_config["save_path"], logger)
 
     # Generating neuroglancer precomputed format
     detected_cells_path = os.path.join(smartspim_config["save_path"], "detected_cells.xml")
-    image_path = os.path.abspath(f"{smartspim_config['input_data']}/{smartspim_config['input_channel']}")
+    image_path = os.path.abspath(
+        f"{smartspim_config['input_data']}/{smartspim_config['input_channel']}"
+    )
 
     # create neuroglancer link
     generate_neuroglancer_link(
         image_path,
-        smartspim_config['name'],
+        smartspim_config["name"],
         smartspim_config["channel"],
         detected_cells_path,
         smartspim_config["save_path"],
         smartspim_config["cellfiner_params"]["voxel_sizes"],
-        logger
+        logger,
     )
-    
-    processing_path = smartspim_config["metadata_path"].joinpath("processing.json")
 
     utils.generate_processing(
         data_processes=data_processes,
-        dest_processing=processing_path,
-        pipeline_version=__version__,
+        dest_processing=str(smartspim_config["metadata_path"]),
+        processor_full_name="Camilo Laiton",
+        pipeline_version="1.5.0",
     )
-    
+
     # Getting tracked resources and plotting image
     utils.stop_child_process(profile_process)
 
@@ -477,6 +491,7 @@ def main(
             smartspim_config["metadata_path"],
             "smartspim_detection",
         )
+
 
 if __name__ == "__main__":
     main()

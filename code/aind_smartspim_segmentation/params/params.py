@@ -8,6 +8,7 @@ from argschema.fields import Boolean, Int, List, Str
 
 from .._shared.types import PathLike
 
+
 class SegParams(ArgSchema):
     """
     Schema format for Segmentation
@@ -88,7 +89,8 @@ class SegParams(ArgSchema):
         },
         dump_default=-1,
     )
-    
+
+
 def get_yaml(yaml_path: PathLike):
     """
     Gets the default configuration from a YAML file

@@ -86,9 +86,7 @@ def expand_chunks(
         ndims = len(current)
         while _get_size(current, itemsize) < target_size:
             prev = current.copy()
-            current[idx % ndims] = min(
-                data_shape[idx % ndims], current[idx % ndims] * 2
-            )
+            current[idx % ndims] = min(data_shape[idx % ndims], current[idx % ndims] * 2)
             idx += 1
             if all(c >= s for c, s in zip(current, data_shape)):
                 break
@@ -123,9 +121,7 @@ class BlockedArrayWriter:
     """
 
     @staticmethod
-    def gen_slices(
-        arr_shape: Tuple[int, ...], block_shape: Tuple[int, ...]
-    ) -> Generator:
+    def gen_slices(arr_shape: Tuple[int, ...], block_shape: Tuple[int, ...]) -> Generator:
         """
         Generate a series of slices that can be used to traverse an array in blocks of a given shape.
 
@@ -212,7 +208,7 @@ class BlockedArrayWriter:
         return expand_chunks(
             chunks,
             arr.shape[-3:],
-            target_size_mb * 1024**2,
+            target_size_mb * 1024 ** 2,
             arr.itemsize,
             mode,
         )

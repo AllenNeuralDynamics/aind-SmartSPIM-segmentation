@@ -383,6 +383,10 @@ def generate_neuroglancer_link(
         "ng_link"
     ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
 
+    json_state["layers"][0][
+        "source"
+    ] = f"zarr://s3://{bucket_path}/{dataset_name}/image_tile_fusing/OMEZarr/{channel_name}.zarr"
+
     json_state["layers"][1][
         "source"
     ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/precomputed"

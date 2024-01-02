@@ -15,7 +15,7 @@ from aind_smartspim_segmentation.utils import utils
 
 def get_data_config(
     data_folder: str,
-    processing_manifest_path: str = "processing_manifest_*",
+    processing_manifest_path: str = "segmentation_processing_manifest*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
     """

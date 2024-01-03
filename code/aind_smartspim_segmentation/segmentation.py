@@ -480,7 +480,7 @@ def main(
     utils.generate_processing(
         data_processes=data_processes,
         dest_processing=str(smartspim_config["metadata_path"]),
-        processor_full_name="Camilo Laiton",
+        processor_full_name="Nicholas Lusk",
         pipeline_version="1.5.0",
     )
 

@@ -146,13 +146,15 @@ def run():
 
     # get default configs
     default_config = get_yaml(
-        os.path.abspath("./aind_smartspim_segmentation/params/default_segment_config.yaml")
+        os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
     )
 
+    print(default_config)
+
     # add paths to default_config
-    default_config["input_data"] = os.path.abspath(pipeline_config['segmentation']['input_data'])
+    default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
     print("Files in path: ", os.listdir(default_config["input_data"]))
-    
+
     default_config[
         "save_path"
     ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"

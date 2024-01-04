@@ -272,7 +272,7 @@ def delay_plane_stats(plane: ArrayLike, log_sigma_size: int, soma_diameter: floa
         plane = plane / maxima
 
     # To leave room to label in the 3d detection.
-    plane = plane * (2 ** 16 - 3)
+    plane = plane * (2**16 - 3)
 
     return np.array([count, maxima, plane.ravel().mean(), plane.ravel().std()])
 
@@ -342,7 +342,7 @@ def find_good_blocks(img, counts, chunk, ds=3):
 
     img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
     count, bin_count = np.histogram(
-        img.astype("uint16"), bins=2 ** 16, range=(0, 2 ** 16), density=True
+        img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True
     )
 
     try:
@@ -352,7 +352,7 @@ def find_good_blocks(img, counts, chunk, ds=3):
 
     img_binary = np.where(img >= thresh, 1, 0)
 
-    cz = int(chunk / 2 ** ds)
+    cz = int(chunk / 2**ds)
     dims = list(img_binary.shape)
 
     b = 0

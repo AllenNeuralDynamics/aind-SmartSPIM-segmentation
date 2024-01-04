@@ -208,7 +208,7 @@ class BlockedArrayWriter:
         return expand_chunks(
             chunks,
             arr.shape[-3:],
-            target_size_mb * 1024 ** 2,
+            target_size_mb * 1024**2,
             arr.itemsize,
             mode,
         )

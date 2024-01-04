@@ -473,7 +473,7 @@ def main(
         smartspim_config["channel"],
         detected_cells_path,
         smartspim_config["save_path"],
-        smartspim_config["cellfiner_params"]["voxel_sizes"],
+        smartspim_config["cellfinder_params"]["voxel_sizes"],
         logger,
     )
 

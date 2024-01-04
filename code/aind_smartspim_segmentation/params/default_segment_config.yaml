@@ -4,7 +4,7 @@ subsample:
     - 1
     - 1
 mask_scale: 3
-bkg_sub: True
+bkg_subtract: True
 padding: 50
 workers: 16
 cellfinder_params:

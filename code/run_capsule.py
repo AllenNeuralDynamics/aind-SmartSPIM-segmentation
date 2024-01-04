@@ -149,8 +149,6 @@ def run():
         os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
     )
 
-    print(default_config)
-
     # add paths to default_config
     default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
     print("Files in path: ", os.listdir(default_config["input_data"]))
@@ -162,12 +160,16 @@ def run():
         "metadata_path"
     ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}/metadata"
 
+    print("Initial cell segmentation config: ", default_config)
+
     # combine configs
     smartspim_config = set_up_pipeline_parameters(
         pipeline_config=pipeline_config, default_config=default_config
     )
 
     smartspim_config["name"] = smartspim_dataset_name
+
+    print("Final cell segmentation config: ", smartspim_config)
 
     segmentation.main(
         data_folder=Path(data_folder),

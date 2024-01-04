@@ -150,7 +150,7 @@ def run():
     )
 
     # add paths to default_config
-    default_config["input_data"] = f"{data_folder}/{pipeline_config['segmentation']['input_data']}"
+    default_config["input_data"] = os.path.abspath(pipeline_config['segmentation']['input_data'])
     default_config[
         "save_path"
     ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"

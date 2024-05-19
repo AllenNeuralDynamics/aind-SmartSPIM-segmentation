@@ -49,8 +49,8 @@ def get_data_config(
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
     
-    processing_data = f"{data_folder}/{processing_manifest_path}"[0]
-    derivatives_dict = utils.read_json_as_dict(glob(f"{data_folder}/{processing_manifest_path}")[0])
+    processing_data = f"{data_folder}/{processing_manifest_path}"
+    derivatives_dict = utils.read_json_as_dict(glob(processing_data)[0])
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]

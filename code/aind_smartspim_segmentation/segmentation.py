@@ -140,7 +140,9 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
         smartspim_config["cellfinder_params"]["end_plane"] = signal_array.shape[-3]
 
     logger.info(
-        f"Starting detection with array {signal_array} with start in {smartspim_config['cellfinder_params']['start_plane']} and end in {smartspim_config['cellfinder_params']['end_plane']}"
+        f"Starting detection with array {signal_array} with"
+        f" start in {smartspim_config['cellfinder_params']['start_plane']}"
+        f" and end in {smartspim_config['cellfinder_params']['end_plane']}"
     )
 
     data_processes.append(
@@ -247,7 +249,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
                 results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
 
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
-            cell_count_list = arr.compute()
+            _ = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 

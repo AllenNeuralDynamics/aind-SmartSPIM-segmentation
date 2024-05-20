@@ -18,17 +18,15 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 import dask
-import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
-from imlib.IO.cells import save_cells
 from photutils.background import Background2D
 from scipy import ndimage as ndi
-from scipy.signal import argrelmin, medfilt2d
+from scipy.signal import argrelmin
 
 from .._shared.types import ArrayLike, PathLike
 from .pymusica import musica
@@ -173,6 +171,7 @@ def delay_detect(
     )
 
     return cells
+
 
 def find_good_blocks(img, counts, chunk, ds=3):
     """

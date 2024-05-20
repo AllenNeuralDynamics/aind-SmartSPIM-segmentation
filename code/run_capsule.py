@@ -48,19 +48,16 @@ def get_data_config(
     # Returning first smartspim dataset found
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
-    
+
     processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
     derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]
-    
+
     # copy processing manifest to results folder
-    fname = processing_data.split('/')[-1]
-    shutil.copyfile(
-        processing_data,
-        f"{results_folder}/{fname}"
-    )
+    fname = processing_data.split("/")[-1]
+    shutil.copyfile(processing_data, f"{results_folder}/{fname}")
 
     print(f"processing manisfest copied to {results_folder}/{fname}")
 
@@ -155,8 +152,7 @@ def run():
         raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
     pipeline_config, smartspim_dataset_name = get_data_config(
-        data_folder=data_folder,
-        results_folder=results_folder
+        data_folder=data_folder, results_folder=results_folder
     )
 
     # get default configs

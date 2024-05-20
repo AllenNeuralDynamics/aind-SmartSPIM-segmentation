@@ -115,7 +115,6 @@ def calculate_offsets(blocks, chunk_size):
 
 
 def cell_detection(smartspim_config: dict, logger: logging.Logger):
-
     image_path = Path(smartspim_config["input_data"]).joinpath(
         f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"
     )
@@ -181,7 +180,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
     rechunk_size = [axis * (chunk_step // axis) for axis in signal_array.chunksize]
     signal_array = signal_array.rechunk(tuple(rechunk_size))
     logger.info(f"Rechunk dask array to {signal_array.chunksize}.")
-    
+
     all_blocks = signal_array.to_delayed().ravel()
     all_offsets = calculate_offsets(signal_array.numblocks, signal_array.chunksize)
 
@@ -192,7 +191,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
             blocks.append(all_blocks[c])
             offsets.append(all_offsets[c])
             counts.append(c)
-      
+
     logger.info(f"There are {len(blocks)} delayed blocks to process.")
 
     logger.info(f"Running background subtraction and segmentation with array {signal_array}")
@@ -211,7 +210,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
     with performance_report(filename=dask_report_file):
         count = 0
         offload = len(blocks) // 2
-        
+
         # breacking up loop to avoid dask hanging
         loop_chunks = [
             (blocks[:offload], offsets[:offload], counts[:offload]),
@@ -221,7 +220,6 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
         for lc in loop_chunks:
             results = []
             for block, offset, count in zip(*lc):
-
                 if smartspim_config["bkg_subtract"]:
                     bkg_sub = utils.delay_astro(
                         block,
@@ -300,6 +298,7 @@ def merge(metadata_path: PathLike, save_path: PathLike, logger: logging.Logger):
         cells=cells,
         xml_file_path=os.path.join(save_path, "detected_cells.xml"),
     )
+
 
 def generate_neuroglancer_link(
     image_path: str,

@@ -216,7 +216,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
         # breacking up loop to avoid dask hanging
         loop_chunks = [
             (blocks[:offload], offsets[:offload], counts[:offload]),
-            (blocks[offload:], offsets[offload:], counts[:offload]),
+            (blocks[offload:], offsets[offload:], counts[offload:]),
         ]
 
         for lc in loop_chunks:

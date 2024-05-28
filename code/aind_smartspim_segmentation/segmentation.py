@@ -113,7 +113,7 @@ def calculate_offsets(blocks, chunk_size):
                 )
     return offsets
 
-
+# Function missed during formatting check
 def cell_detection(smartspim_config: dict, logger: logging.Logger):
     image_path = Path(smartspim_config["input_data"]).joinpath(
         f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"

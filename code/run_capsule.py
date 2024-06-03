@@ -4,6 +4,7 @@ in code ocean
 """
 
 import os
+import shutil
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
@@ -15,6 +16,7 @@ from aind_smartspim_segmentation.utils import utils
 
 def get_data_config(
     data_folder: str,
+    results_folder: str,
     processing_manifest_path: str = "segmentation_processing_manifest*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
@@ -47,10 +49,17 @@ def get_data_config(
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
 
-    derivatives_dict = utils.read_json_as_dict(glob(f"{data_folder}/{processing_manifest_path}")[0])
+    processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+    derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]
+
+    # copy processing manifest to results folder
+    fname = processing_data.split("/")[-1]
+    shutil.copyfile(processing_data, f"{results_folder}/{fname}")
+
+    print(f"processing manisfest copied to {results_folder}/{fname}")
 
     return derivatives_dict, smartspim_dataset
 
@@ -142,7 +151,9 @@ def run():
     if len(missing_files):
         raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
-    pipeline_config, smartspim_dataset_name = get_data_config(data_folder=data_folder)
+    pipeline_config, smartspim_dataset_name = get_data_config(
+        data_folder=data_folder, results_folder=results_folder
+    )
 
     # get default configs
     default_config = get_yaml(

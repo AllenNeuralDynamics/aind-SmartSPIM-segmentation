@@ -18,17 +18,15 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 import dask
-import dask.array as da
 import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
-from imlib.IO.cells import save_cells
 from photutils.background import Background2D
 from scipy import ndimage as ndi
-from scipy.signal import argrelmin, medfilt2d
+from scipy.signal import argrelmin
 
 from .._shared.types import ArrayLike, PathLike
 from .pymusica import musica
@@ -149,49 +147,6 @@ def delay_astro(
 
 
 @dask.delayed
-def delay_preprocess(
-    img: ArrayLike, reflect: int, pad: int, subtract: bool = False, bkg: ArrayLike = None
-):
-    """
-    Dask delayed function to clip and pad values in
-    a dask array.
-
-    Parameters
-    ------------
-    img: ArrayLike
-        Array with the image to process
-
-    reflect: int
-        Mode for the padding
-
-    pad: int
-        Padding value to apply
-        around the image
-
-    subtract: bool
-        If we want to subtract a background
-        image. Default: False
-
-    bkg: ArrayLike
-        Background image
-
-    Returns
-    ------------
-    ArrayLike:
-        Lazy array with scheduled padding
-    """
-
-    if subtract:
-        img = img - bkg
-        img = da.clip(img, a_min=0, a_max=65535)
-
-    img = da.pad(img, reflect, mode="reflect")
-    img = da.pad(img, pad, mode="constant", constant_values=0)
-
-    return img
-
-
-@dask.delayed
 def delay_detect(
     img: ArrayLike,
     save_path: PathLike,
@@ -216,102 +171,6 @@ def delay_detect(
     )
 
     return cells
-
-
-@dask.delayed
-def delay_postprocess(count: int, save_path: str, cells, offset: int, padding: int, dims: int):
-    """
-    Delayed postprocess to save identified cells
-    per block
-    """
-    bad_cells = []
-    for c, cell in enumerate(cells):
-        loc = [cell.x - padding, cell.y - padding, cell.z - padding]
-
-        if min(loc) < 0 or max([l - (s - 2 * padding) for l, s in zip(loc, dims)]) > 0:
-            bad_cells.append(c)
-        else:
-            cell.x = loc[0] + offset[0]
-            cell.y = loc[1] + offset[1]
-            cell.z = loc[2] + offset[2]
-
-            if cell.type == -1:
-                cell.type = 1
-
-            cells[c] = cell
-
-    for c in bad_cells[::-1]:
-        cells.pop(c)
-
-    # save the blocks
-    fname = "cells_block_" + str(count) + ".xml"
-    print(f"Saving cells to path: {fname}")
-    save_cells(cells, os.path.join(save_path, fname))
-
-    return len(cells)
-
-
-@dask.delayed
-def delay_plane_stats(plane: ArrayLike, log_sigma_size: int, soma_diameter: float, count: int):
-    """
-    Delayed dask function to get
-    plane statistics
-    """
-    plane = plane.squeeze()
-    gaussian_sigma = log_sigma_size * soma_diameter
-    plane = medfilt2d(plane.astype(np.float64))
-    plane = ndi.gaussian_filter(plane, gaussian_sigma)
-    plane = ndi.laplace(plane)
-    plane = plane * -1
-
-    plane = plane - plane.min()
-    plane = np.nan_to_num(plane)
-
-    if plane.max() != 0:
-        maxima = plane.max()
-        plane = plane / maxima
-
-    # To leave room to label in the 3d detection.
-    plane = plane * (2**16 - 3)
-
-    return np.array([count, maxima, plane.ravel().mean(), plane.ravel().std()])
-
-
-@dask.delayed
-def delay_all(img, reflect, pad, save_path, process_by, stat, offset, dims, count, smartspim_config):
-    img = np.pad(img, reflect, mode="reflect")
-    img = np.pad(img, pad, mode="constant", constant_values=0)
-
-    cells = detect.main(
-        signal_array=img, save_path=save_path, process_by=process_by, stats=stat, **smartspim_config
-    )
-
-    bad_cells = []
-    padding = pad + reflect
-    for c, cell in enumerate(cells):
-        loc = [cell.x - padding, cell.y - padding, cell.z - padding]
-
-        if min(loc) < 0 or max([l - (s - 2 * padding) for l, s in zip(loc, dims)]) > 0:
-            bad_cells.append(c)
-        else:
-            cell.x = loc[0] + offset[0]
-            cell.y = loc[1] + offset[1]
-            cell.z = loc[2] + offset[2]
-
-            if cell.type == -1:
-                cell.type = 1
-
-            cells[c] = cell
-
-    for c in bad_cells[::-1]:
-        cells.pop(c)
-
-    # save the blocks
-    fname = "cells_block_" + str(count) + ".xml"
-    print(f"Saving cells to path: {fname}")
-    save_cells(cells, os.path.join(save_path, fname))
-
-    return len(cells)
 
 
 def find_good_blocks(img, counts, chunk, ds=3):

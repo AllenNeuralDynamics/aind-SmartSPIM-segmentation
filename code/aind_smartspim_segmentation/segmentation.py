@@ -113,9 +113,8 @@ def calculate_offsets(blocks, chunk_size):
                 )
     return offsets
 
-
+# Function missed during formatting check
 def cell_detection(smartspim_config: dict, logger: logging.Logger):
-
     image_path = Path(smartspim_config["input_data"]).joinpath(
         f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"
     )
@@ -141,7 +140,9 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
         smartspim_config["cellfinder_params"]["end_plane"] = signal_array.shape[-3]
 
     logger.info(
-        f"Starting detection with array {signal_array} with start in {smartspim_config['cellfinder_params']['start_plane']} and end in {smartspim_config['cellfinder_params']['end_plane']}"
+        f"Starting detection with array {signal_array} with"
+        f" start in {smartspim_config['cellfinder_params']['start_plane']}"
+        f" and end in {smartspim_config['cellfinder_params']['end_plane']}"
     )
 
     data_processes.append(
@@ -182,9 +183,17 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
     signal_array = signal_array.rechunk(tuple(rechunk_size))
     logger.info(f"Rechunk dask array to {signal_array.chunksize}.")
 
-    blocks = signal_array.to_delayed().ravel()
+    all_blocks = signal_array.to_delayed().ravel()
+    all_offsets = calculate_offsets(signal_array.numblocks, signal_array.chunksize)
 
-    offsets = calculate_offsets(signal_array.numblocks, signal_array.chunksize)
+    blocks, offsets, counts = [], [], []
+
+    for c, gb in good_blocks.items():
+        if gb:
+            blocks.append(all_blocks[c])
+            offsets.append(all_offsets[c])
+            counts.append(c)
+
     logger.info(f"There are {len(blocks)} delayed blocks to process.")
 
     logger.info(f"Running background subtraction and segmentation with array {signal_array}")
@@ -203,48 +212,44 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
     with performance_report(filename=dask_report_file):
         count = 0
         offload = len(blocks) // 2
+
+        # breacking up loop to avoid dask hanging
         loop_chunks = [
-            (blocks[:offload], offsets[:offload]),
-            (blocks[offload:], offsets[offload:]),
+            (blocks[:offload], offsets[:offload], counts[:offload]),
+            (blocks[offload:], offsets[offload:], counts[offload:]),
         ]
 
         for lc in loop_chunks:
             results = []
-            for block, offset in zip(*lc):
-
-                if good_blocks[count]:
-                    if smartspim_config["bkg_subtract"]:
-                        bkg_sub = utils.delay_astro(
-                            block,
-                            pad=smartspim_config["padding"],
-                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
-                        )
-                    else:
-                        bkg_sub = utils.delay_preprocess(
-                            img=block,
-                            reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
-                            pad=smartspim_config["padding"],
-                        )
-
-                    cell_count = utils.delay_detect(
-                        bkg_sub,
-                        smartspim_config["metadata_path"],
-                        count,
-                        offset,
-                        smartspim_config["padding"]
-                        + smartspim_config["cellfinder_params"]["soma_diameter"],
-                        "block",
-                        smartspim_config["cellfinder_params"],
+            for block, offset, count in zip(*lc):
+                if smartspim_config["bkg_subtract"]:
+                    bkg_sub = utils.delay_astro(
+                        block,
+                        pad=smartspim_config["padding"],
+                        reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
+                    )
+                else:
+                    bkg_sub = utils.delay_preprocess(
+                        img=block,
+                        reflect=smartspim_config["cellfinder_params"]["soma_diameter"],
+                        pad=smartspim_config["padding"],
                     )
 
-                    count += 1
+                cell_count = utils.delay_detect(
+                    bkg_sub,
+                    smartspim_config["metadata_path"],
+                    count,
+                    offset,
+                    smartspim_config["padding"]
+                    + smartspim_config["cellfinder_params"]["soma_diameter"],
+                    "block",
+                    smartspim_config["cellfinder_params"],
+                )
 
-                    results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
-                else:
-                    count += 1
+                results.append(da.from_delayed(cell_count[1], shape=(1,), dtype=int))
 
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
-            cell_count_list = arr.compute()
+            _ = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
             client.restart()
 

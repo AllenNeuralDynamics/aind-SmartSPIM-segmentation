@@ -28,6 +28,7 @@ from ng_link.ng_state import get_points_from_xml
 
 from .__init__ import __version__
 from ._shared.types import PathLike
+from .spot_detection import detect
 from .utils import utils
 
 
@@ -174,25 +175,22 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
     )
 
     # get quality blocks using mask
-    chunks = [int(np.ceil(x / chunk_step)) for x in signal_array.shape]
-    good_blocks = utils.find_good_blocks(
-        mask_array, chunks, chunk_step, smartspim_config["mask_scale"]
+    signal_array = signal_array.rechunk(
+        chunks = (chunk_step, chunk_step, chunk_step)
     )
-
-    rechunk_size = [axis * (chunk_step // axis) for axis in signal_array.chunksize]
-    signal_array = signal_array.rechunk(tuple(rechunk_size))
-    logger.info(f"Rechunk dask array to {signal_array.chunksize}.")
-
-    all_blocks = signal_array.to_delayed().ravel()
-    all_offsets = calculate_offsets(signal_array.numblocks, signal_array.chunksize)
-
-    blocks, offsets, counts = [], [], []
-
-    for c, gb in good_blocks.items():
-        if gb:
-            blocks.append(all_blocks[c])
-            offsets.append(all_offsets[c])
-            counts.append(c)
+    
+    good_blocks = utils.find_good_blocks(
+        mask_array,
+        signal_array.numblocks,
+        chunk_step, 
+        smartspim_config["mask_scale"]
+    )
+    
+    counts = list(np.where(good_blocks)[0])
+    blocks = signal_array.to_delayed().ravel()[counts]
+    
+    offsets = calculate_offsets(signal_array.numblocks, signal_array.chunksize)
+    offsets = [offsets[c] for c in counts]
 
     logger.info(f"There are {len(blocks)} delayed blocks to process.")
 

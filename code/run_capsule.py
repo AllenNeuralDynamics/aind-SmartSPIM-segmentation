@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from aind_smartspim_segmentation import segmentation
+from aind_smartspim_segmentation.spot_detection import detect
 from aind_smartspim_segmentation.params import get_yaml
 from aind_smartspim_segmentation.utils import utils
 
@@ -180,15 +181,53 @@ def run():
 
     smartspim_config["name"] = smartspim_dataset_name
 
-    print("Final cell segmentation config: ", smartspim_config)
+    #print("Final cell segmentation config: ", smartspim_config)
 
-    segmentation.main(
-        data_folder=Path(data_folder),
-        output_segmented_folder=Path(results_folder),
-        intermediate_segmented_folder=Path(scratch_folder),
-        smartspim_config=smartspim_config,
+    #segmentation.main(
+    #    data_folder=Path(data_folder),
+    #    output_segmented_folder=Path(results_folder),
+    #    intermediate_segmented_folder=Path(scratch_folder),
+    #    smartspim_config=smartspim_config,
+    #)
+    
+    logger = utils.create_logger(
+        output_log_path=smartspim_config['metadata_path']
     )
+    
+    sigma_zyx = [2.0, 1.8, 1.8]
+    axis_pad = int(1.6 * max(max(sigma_zyx[1:]), sigma_zyx[0]) * 5)
+    min_zyx = [3, 3, 3]
+    filt_thresh = 10
+    raw_thresh = 50
+    context_radius = 10
+    radius_confidence = 0.05
 
+    # Data loader params
+    detect_params = {
+        "dataset_path": Path(smartspim_config["input_data"]).joinpath(
+            f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"
+        ),
+        "segmentation_mask_path": None,
+        "multiscale": "1",
+        "prediction_chunksize": (128, 128, 128),
+        "target_size_mb": 3048,
+        "n_workers": 0,
+        "batch_size": 1,
+        "axis_pad": axis_pad,
+        "output_folder": smartspim_config["save_path"],
+        "logger": logger,
+        "super_chunksize": None,
+        "spot_parameters": {
+            "sigma_zyx": sigma_zyx,
+            "min_zyx": min_zyx,
+            "filt_thresh": filt_thresh,
+            "raw_thresh": raw_thresh,
+            "context_radius": context_radius,
+            "radius_confidence": radius_confidence,
+        },
+    }
+    
+    detect.spot_detection(detect_params)
 
 if __name__ == "__main__":
     run()

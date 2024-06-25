@@ -1,0 +1,31 @@
+# Defaults from the original z1 capsule
+puncta_params : 
+    dataset_path: DATA_PATH,
+    segmentation_mask_path: SEGMENTATION_PATH,
+    multiscale: "0",
+    prediction_chunksize:
+        - 128,
+        - 128,
+        - 128,
+    target_size_mb: 3048,
+    n_workers: 0,
+    batch_size: 1,
+    axis_pad: axis_pad,
+    output_folder: output_folder,
+    logger: logger,
+    super_chunksize: None,
+    spot_parameters:
+        sigma_zyx:
+            - 2.0
+            - 1.8
+            - 1.8
+        min_zyx:
+            - 3
+            - 3
+            - 3
+        filt_thresh: 10
+        raw_thresh: 50
+        context_radius: 10
+        radius_confidence: 0,05
+        },
+    }

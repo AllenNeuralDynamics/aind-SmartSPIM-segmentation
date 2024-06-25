@@ -32,7 +32,6 @@ from .._shared.types import ArrayLike, PathLike
 from .pymusica import musica
 
 
-@dask.delayed
 def delay_astro(
     img: ArrayLike,
     estimator: str = "MedianBackground",
@@ -214,8 +213,7 @@ def find_good_blocks(img, counts, chunk, ds=3):
     cz = int(chunk / 2**ds)
     dims = list(img_binary.shape)
 
-    b = 0
-    block_dict = {}
+    blocks = []
 
     """ there are rare occasions where the level 0 and
     level 3 array disagree on chuncks so have some
@@ -246,13 +244,11 @@ def find_good_blocks(img, counts, chunk, ds=3):
                 ]
 
                 if np.sum(block) > 0:
-                    block_dict[b] = True
+                    blocks.append(True)
                 else:
-                    block_dict[b] = False
+                    blocks.append(False)
 
-                b += 1
-
-    return block_dict
+    return blocks
 
 
 def create_logger(output_log_path: PathLike):

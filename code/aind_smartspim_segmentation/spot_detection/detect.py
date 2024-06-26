@@ -19,6 +19,9 @@ from aind_large_scale_prediction.generator.utils import (
 from aind_large_scale_prediction.io import ImageReaderFactory
 from neuroglancer import CoordinateSpace
 
+from cellfinder_core.classify.tools import get_model
+from cellfinder_core.train.train_yml import models
+
 from ._shared.types import ArrayLike, PathLike
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
 from .traditional_detection.puncta_detection_optimized import (
@@ -112,6 +115,7 @@ def execute_worker(
     batch_super_chunk: Tuple[slice],
     batch_internal_slice: Tuple[slice],
     spot_parameters: Dict,
+    classifier_parameters: Dict,
     overlap_prediction_chunksize: Tuple[int],
     dataset_shape: Tuple[int],
     logger: logging.Logger,
@@ -134,6 +138,9 @@ def execute_worker(
 
     spot_parameters: Dict
         Spot detection parameters.
+        
+    classifier_parameters: Dict
+        ResNet classifier parameters
 
     logger: logging.Logger
         Logging object
@@ -146,26 +153,32 @@ def execute_worker(
     curr_pid = os.getpid()
     mask = None
     # (Batch, channels, Z, Y, X)
-    if len(data.shape) == 5 and data.shape[-4] == 2:
-        mask = data[:, 1, ...]
-        data = data[:, 0, ...]
-        data = apply_mask(data=data, mask=mask.detach().clone())
+    if len(data.shape) == 5 and data.shape[-4] == 3:
+        mask = data[:, 2, ...]
+        background = data[:, 1, ...]
+        signal = data[:, 0, ...]
+        signal = apply_mask(data=signal, mask=mask.detach().clone())
+    else:
+        background = data[:, 1, ...]
+        signal = data[:, 0, ...]
 
-    data_block_cupy = cupy.asarray(data)
+    signal_block_cupy = cupy.asarray(signal)
+    background_block_cupy = cupy.asarray(background)
     global_worker_spots = None
 
     # Processing batch
-    for batch_idx in range(0, data.shape[0]):
-        curr_block = cupy.squeeze(data_block_cupy[batch_idx, ...])
+    for batch_idx in range(0, signal.shape[0]):
+        curr_signal_block = cupy.squeeze(signal_block_cupy[batch_idx, ...])
+        curr_background_block = cupy.squeeze(background_block_cupy[batch_idx, ...])
         logger.info(
-            f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {data.shape[0]} - Data shape: {data.shape} - Current block: {curr_block.shape}"  # noqa: E501
+            f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {signal.shape[0]} - Data shape: {signal.shape} - Current block: {curr_signal_block.shape}"  # noqa: E501
         )
         
         #background_percentage=spot_parameters["background_percentage"],
 
         # Making sure CuPy it's running in the correct device
         spots = traditional_3D_spot_detection(
-            data_block=curr_block,
+            data_block=curr_signal_block,
             sigma_zyx=spot_parameters["sigma_zyx"],
             min_zyx=spot_parameters["min_zyx"],
             filt_thresh=spot_parameters["filt_thresh"],
@@ -174,7 +187,7 @@ def execute_worker(
             radius_confidence=spot_parameters["radius_confidence"],
             logger=logger,
         )
-
+        
         # Adding spots to current batch list
         curr_spots = None
         if spots is None:
@@ -183,31 +196,53 @@ def execute_worker(
             )
 
         else:
-
-            # Recover global position of internal chunk
-            (
-                global_coord_pos,
-                global_coord_positions_start,
-                global_coord_positions_end,
-            ) = recover_global_position(
-                super_chunk_slice=batch_super_chunk,
-                internal_slices=batch_internal_slice,
+            
+            #TODO where I want to add the classifier
+            model = get_model(
+                existing_model=classifier_parameters['trained_model'],
+                model_weights=None,
+                network_depth=models[classifier_parameters['network_depth']],
+                inference=True,
             )
-
-            unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
-                global_coord_pos=global_coord_pos[-3:],
-                block_shape=curr_block.shape[-3:],
-                overlap_prediction_chunksize=overlap_prediction_chunksize[-3:],
-                dataset_shape=dataset_shape[-3:],  # zarr_dataset.lazy_data.shape,
-            )
-
-            if mask is not None:
-                # Getting spots IDs, adding mask ID to the spot as extra value at the end
-                mask = torch.squeeze(mask)
-                mask_ids = np.expand_dims(
-                    mask[spots[:, 0], spots[:, 1], spots[:, 2]], axis=0
+            
+            spots = utils.run_classify(
+                curr_signal_block,
+                curr_background_block,
+                classifier_parameters['cellfinder_params'],
+                classifier_parameters['downsample'],
+                model
                 )
-                spots = np.append(spots.T, mask_ids, axis=0).T
+            
+            if spots is None:
+                logger.info(
+                    f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}"
+                ) 
+            
+
+                # Recover global position of internal chunk
+                (
+                    global_coord_pos,
+                    global_coord_positions_start,
+                    global_coord_positions_end,
+                ) = recover_global_position(
+                    super_chunk_slice=batch_super_chunk,
+                    internal_slices=batch_internal_slice,
+                )
+
+                unpadded_global_slice, unpadded_local_slice = unpad_global_coords(
+                    global_coord_pos=global_coord_pos[-3:],
+                    block_shape=curr_signal_block.shape[-3:],
+                    overlap_prediction_chunksize=overlap_prediction_chunksize[-3:],
+                    dataset_shape=dataset_shape[-3:],  # zarr_dataset.lazy_data.shape,
+                )
+
+                if mask is not None:
+                    # Getting spots IDs, adding mask ID to the spot as extra value at the end
+                    mask = torch.squeeze(mask)
+                    mask_ids = np.expand_dims(
+                        mask[spots[:, 0], spots[:, 1], spots[:, 2]], axis=0
+                    )   
+                    spots = np.append(spots.T, mask_ids, axis=0).T
 
             curr_spots = spots.copy().astype(np.int32)
             # Converting to global coordinates, only to ZYX position, leaving mask ID if exists
@@ -223,7 +258,9 @@ def execute_worker(
             logger.info(
                 f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx} - Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos} - upadded global coords: {unpadded_global_slice}"  # noqa: E501
             )
-
+            
+            
+            
             # Adding spots to the worker batch
             if global_worker_spots is None:
                 global_worker_spots = curr_spots.copy()
@@ -562,7 +599,7 @@ def spot_detection(
 
     else:
         spots_global_coordinate = spots_global_coordinate.astype(np.int32)
-        # Final prunning, might be spots in boundaries where spots where splitted
+        # Final prunning, might be spots in boundaries where spots where split
         start_final_prunning_time = time()
         spots_global_coordinate_prunned, removed_pos = prune_blobs(
             # Prunning only ZYX locations, careful with Masks IDs

@@ -24,6 +24,7 @@ import psutil
 from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
 from astropy.stats import SigmaClip
 from cellfinder_core.detect import detect
+from cellfinder_core.classify.cube_generator import CubeGeneratorFromFile
 from photutils.background import Background2D
 from scipy import ndimage as ndi
 from scipy.signal import argrelmin
@@ -144,6 +145,88 @@ def delay_astro(
 
     return img
 
+def run_classify(
+    cells: ArrayLike,
+    signal: ArrayLike,
+    background: ArrayLike,
+    classify_config: dict,
+    level: int,
+    model
+):
+    """
+    Function to run cellfinder classification
+    
+    Parameters
+    ----------
+    signal : ArrayLike
+        dask array of signal channel
+    background : ArrayLike
+        dask array of bakcground channel
+    metadata_path : PathLike
+        path to where cell XMLs from segmentation are located and will be saved
+    count : int
+        the block that is being classified
+    offset: tuple
+        the x, y, z coordinates the current block is offset by
+    classify_config: dict
+        parameterization for classification model
+    level: int
+        the zarr level that the model is classifying on
+    padding: int
+        the padding that is added to each block to account for edge cells
+    model: 
+        the model that is being used
+
+    Returns
+    -------
+    out: str
+        information on the classified block
+    
+    """
+    
+    cells /= 2**level
+
+    inference_generator = CubeGeneratorFromFile(
+        points=cells,
+        signal_array=signal,
+        background_array=background,
+        voxel_sizes=classify_config['voxel_sizes'],
+        network_voxel_sizes=classify_config['network_voxel_sizes'],
+        batch_size=classify_config['batch_size'],
+        cube_width=classify_config['cube_width'],
+        cube_height=classify_config['cube_height'],
+        cube_depth=classify_config['cube_depth'],
+        )
+
+    predictions = model.predict(
+        inference_generator,
+        use_multiprocessing=False,
+        workers=1,
+        verbose=True,
+        callbacks=None,
+    )
+        
+    predictions = predictions.round()
+    predictions = predictions.astype("uint16")
+
+    predictions = np.argmax(predictions, axis=1)
+    offset_class = []
+
+    # only go through the "extractable" points
+    for idx, cell in enumerate(inference_generator.ordered_points):
+        cell.type = predictions[idx] + 1
+        if cell.type == 2:
+            offset_class.append(
+                [
+                    cell.x * 2**level,
+                    cell.y,
+                    cell.z
+                ]
+            )
+    
+    
+
+    return out
 
 @dask.delayed
 def delay_detect(

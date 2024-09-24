@@ -90,7 +90,7 @@ def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
         Dictionary with the combined parameters
     """
 
-    default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
+    default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.ome.zarr"
     default_config["channel"] = pipeline_config["segmentation"]["channel"]
     default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
     default_config["chunk_size"] = int(pipeline_config["segmentation"]["chunksize"])

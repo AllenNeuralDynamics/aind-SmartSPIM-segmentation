@@ -21,7 +21,7 @@ RUN pip install -U --no-cache-dir \
     photutils==1.6.0 \
     imlib==0.1.3 \
     zarr==2.13.6 \
-    aind-data-schema==0.22.1 \
+    aind-data-schema==1.0.0 \
     aind-ng-link==1.0.6 \
     jupyter-server-proxy==3.2.2 \
     git+https://github.com/camilolaiton/cellfinder-core.git@block_seg

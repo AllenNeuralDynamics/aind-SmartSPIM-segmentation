@@ -251,7 +251,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
             _ = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
-            client.restart()
+            client.restart(wait_for_workers = False)
 
     end_date_time = datetime.now()
 

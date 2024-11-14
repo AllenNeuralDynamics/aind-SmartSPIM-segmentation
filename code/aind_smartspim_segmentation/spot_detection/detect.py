@@ -164,8 +164,9 @@ def execute_worker(
 
     signal_block_cupy = cupy.asarray(signal)
     background_block_cupy = cupy.asarray(background)
-    global_worker_spots = None
-
+    global_worker_detected_spots = None
+    global_worker_classified_spots = None
+    
     # Processing batch
     for batch_idx in range(0, signal.shape[0]):
         curr_signal_block = cupy.squeeze(signal_block_cupy[batch_idx, ...])
@@ -177,7 +178,7 @@ def execute_worker(
         #background_percentage=spot_parameters["background_percentage"],
 
         # Making sure CuPy it's running in the correct device
-        spots = traditional_3D_spot_detection(
+        detected_spots = traditional_3D_spot_detection(
             data_block=curr_signal_block,
             sigma_zyx=spot_parameters["sigma_zyx"],
             min_zyx=spot_parameters["min_zyx"],
@@ -189,8 +190,9 @@ def execute_worker(
         )
         
         # Adding spots to current batch list
-        curr_spots = None
-        if spots is None:
+        curr_detected_spots = None
+        curr_classified_spots = None
+        if detected_spots is None:
             logger.info(
                 f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}"
             )
@@ -198,6 +200,7 @@ def execute_worker(
         else:
             
             #TODO where I want to add the classifier
+            # maybe move the model out to the start of the for loop
             model = get_model(
                 existing_model=classifier_parameters['trained_model'],
                 model_weights=None,
@@ -205,7 +208,8 @@ def execute_worker(
                 inference=True,
             )
             
-            spots = utils.run_classify(
+            classified_spots = utils.run_classify(
+                detected_spots,
                 curr_signal_block,
                 curr_background_block,
                 classifier_parameters['cellfinder_params'],
@@ -213,7 +217,7 @@ def execute_worker(
                 model
                 )
             
-            if spots is None:
+            if classified_spots is None:
                 logger.info(
                     f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}"
                 ) 
@@ -239,40 +243,68 @@ def execute_worker(
                 if mask is not None:
                     # Getting spots IDs, adding mask ID to the spot as extra value at the end
                     mask = torch.squeeze(mask)
-                    mask_ids = np.expand_dims(
-                        mask[spots[:, 0], spots[:, 1], spots[:, 2]], axis=0
+                    mask_detected_ids = np.expand_dims(
+                        mask[
+                            detected_spots[:, 0], 
+                            detected_spots[:, 1], 
+                            detected_spots[:, 2]
+                        ],
+                        axis=0
                     )   
-                    spots = np.append(spots.T, mask_ids, axis=0).T
+                    detected_spots = np.append(detected_spots.T, mask_detected_ids, axis=0).T
+                    
+                    mask_classified_ids = np.expand_dims(
+                        mask[
+                            classified_spots[:, 0], 
+                            classified_spots[:, 1], 
+                            classified_spots[:, 2]
+                        ],
+                        axis=0
+                    )   
+                    classified_spots = np.append(classified_spots.T, mask_classified_ids, axis=0).T
 
-            curr_spots = spots.copy().astype(np.int32)
+            curr_detected_spots = detected_spots.copy().astype(np.int32)
+            curr_classified_spots = classified_spots.copy().astype(np.int32)
             # Converting to global coordinates, only to ZYX position, leaving mask ID if exists
-            curr_spots[:, :3] = np.array(global_coord_positions_start)[
+            curr_detected_spots[:, :3] = np.array(global_coord_positions_start)[
                 :, -3:
-            ] + np.array(spots[:, :3])
+            ] + np.array(detected_spots[:, :3])
+                
+            curr_classified_spots[:, :3] = np.array(global_coord_positions_start)[
+                :, -3:
+            ] + np.array(classified_spots[:, :3])
 
             # Removing points within pad area
-            curr_spots = remove_points_in_pad_area(
-                points=curr_spots, unpadded_slices=unpadded_global_slice
+            curr_detected_spots = remove_points_in_pad_area(
+                points=curr_classified_spots, unpadded_slices=unpadded_global_slice
+            )
+            
+            curr_classified_spots = remove_points_in_pad_area(
+                points=curr_classified_spots, unpadded_slices=unpadded_global_slice
             )
 
             logger.info(
                 f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx} - Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos} - upadded global coords: {unpadded_global_slice}"  # noqa: E501
             )
             
-            
-            
             # Adding spots to the worker batch
-            if global_worker_spots is None:
-                global_worker_spots = curr_spots.copy()
+            if global_worker_detected_spots is None:
+                global_worker_detected_spots = curr_detected_spots.copy()
+                global_worker_classified_spots = curr_classified_spots.copy()
 
             else:
-                global_worker_spots = np.append(
-                    global_worker_spots,
-                    curr_spots,
+                global_worker_detected_spots = np.append(
+                    global_worker_detected_spots,
+                    curr_detected_spots,
+                    axis=0,
+                )
+                global_worker_classified_spots = np.append(
+                    global_worker_classified_spots,
+                    curr_classified_spots,
                     axis=0,
                 )
 
-    return global_worker_spots
+    return global_worker_detected_spots, global_worker_classified_spots
 
 
 def _execute_worker(params: Dict):

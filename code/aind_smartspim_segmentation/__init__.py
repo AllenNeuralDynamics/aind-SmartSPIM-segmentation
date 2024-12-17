@@ -1,2 +1,5 @@
-"""Init file for cell segmentation"""
-__version__ = "0.0.6"
+"""
+Module init file
+"""
+
+__version__ = "0.0.7"

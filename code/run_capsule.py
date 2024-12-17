@@ -1,23 +1,18 @@
 """
-Main file to execute the smartspim segmentation
-in code ocean
+Scripts that runs the Code Ocean capsule
 """
 
 import os
-import shutil
-from glob import glob
 from pathlib import Path
-from typing import List, Tuple
 
-from aind_smartspim_segmentation import segmentation
-from aind_smartspim_segmentation.params import get_yaml
+from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.utils import utils
-
+import shutil
 
 def get_data_config(
     data_folder: str,
     results_folder: str,
-    processing_manifest_path: str = "segmentation_processing_manifest*",
+    processing_manifest_path: str = "processing_manifest*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
     """
@@ -63,47 +58,6 @@ def get_data_config(
 
     return derivatives_dict, smartspim_dataset
 
-
-def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
-    """
-    Sets up smartspim stitching parameters that come from the
-    pipeline configuration
-
-    Parameters
-    -----------
-    smartspim_dataset: str
-        String with the smartspim dataset name
-
-    pipeline_config: dict
-        Dictionary that comes with the parameters
-        for the pipeline described in the
-        processing_manifest.json
-
-    default_config: dict
-        Dictionary that has all the default
-        parameters to execute this capsule with
-        smartspim data
-
-    Returns
-    -----------
-    Dict
-        Dictionary with the combined parameters
-    """
-
-    default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
-    default_config["channel"] = pipeline_config["segmentation"]["channel"]
-    default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
-    default_config["chunk_size"] = int(pipeline_config["segmentation"]["chunksize"])
-    default_config["cellfinder_params"]["start_plane"] = int(
-        pipeline_config["segmentation"]["signal_start"]
-    )
-    default_config["cellfinder_params"]["end_plane"] = int(
-        pipeline_config["segmentation"]["signal_end"]
-    )
-
-    return default_config
-
-
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """
     Validates input elemts for a capsule in
@@ -130,17 +84,15 @@ def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
 
     return missing_inputs
 
-
 def run():
     """
-    Main function to execute the smartspim segmentation
-    in code ocean
+    Run function
     """
 
-    # Absolute paths of common Code Ocean folders
-    data_folder = os.path.abspath("../data")
-    results_folder = os.path.abspath("../results")
-    scratch_folder = os.path.abspath("../scratch")
+    # Code Ocean folders
+    RESULTS_FOLDER = Path(os.path.abspath("../results"))
+    # SCRATCH_FOLDER = Path(os.path.abspath("../scratch"))
+    DATA_FOLDER = Path(os.path.abspath("../data"))
 
     # It is assumed that these files
     # will be in the data folder
@@ -152,43 +104,65 @@ def run():
         raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
     pipeline_config, smartspim_dataset_name = get_data_config(
-        data_folder=data_folder, results_folder=results_folder
+        data_folder=data_folder, results_folder=RESULTS_FOLDER,
     )
 
-    # get default configs
-    default_config = get_yaml(
-        os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
+    input_channel = f"{pipeline_config['segmentation']['channel']}.zarr"
+
+    DATA_PATH = f"{DATA_FOLDER}/{input_channel}"
+    SEGMENTATION_PATH = None
+
+    # Output folder
+    output_folder = RESULTS_FOLDER.joinpath(f"cell_{pipeline_config['segmentation']['channel']}")
+    metadata_path = output_folder.joinpath("metadata")
+    
+    utils.create_folder(dest_dir=str(output_folder), verbose=True)
+    utils.create_folder(dest_dir=str(metadata_path), verbose=True)
+    
+    logger = utils.create_logger(output_log_path=str(metadata_path))
+
+    # Puncta detection parameters
+
+    sigma_zyx = [1.8, 1.0, 1.0]
+    background_percentage = 25
+    axis_pad = int(1.6 * max(max(sigma_zyx[1:]), sigma_zyx[0]) * 5)
+    min_zyx = [3, 3, 3]
+    filt_thresh = 20
+    raw_thresh = 180
+    context_radius = 3
+    radius_confidence = 0.05
+
+    # Data loader params
+    puncta_params = {
+        "dataset_path": DATA_PATH,
+        "segmentation_mask_path": SEGMENTATION_PATH,
+        "multiscale": "1",
+        "prediction_chunksize": (128, 128, 128),
+        "target_size_mb": 3048,
+        "n_workers": 0,
+        "batch_size": 1,
+        "axis_pad": axis_pad,
+        "output_folder": output_folder,
+        "logger": logger,
+        "super_chunksize": None,
+        "spot_parameters": {
+            "sigma_zyx": sigma_zyx,
+            "background_percentage": background_percentage,
+            "min_zyx": min_zyx,
+            "filt_thresh": filt_thresh,
+            "raw_thresh": raw_thresh,
+            "context_radius": context_radius,
+            "radius_confidence": radius_confidence,
+        },
+    }
+
+    logger.info(
+        f"Dataset path: {puncta_params['dataset_path']} - Cell detection params: {puncta_params}"
     )
 
-    # add paths to default_config
-    default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
-    print("Files in path: ", os.listdir(default_config["input_data"]))
-
-    default_config[
-        "save_path"
-    ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"
-    default_config[
-        "metadata_path"
-    ] = f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}/metadata"
-
-    print("Initial cell segmentation config: ", default_config)
-
-    # combine configs
-    smartspim_config = set_up_pipeline_parameters(
-        pipeline_config=pipeline_config, default_config=default_config
-    )
-
-    smartspim_config["name"] = smartspim_dataset_name
-
-    print("Final cell segmentation config: ", smartspim_config)
-
-    segmentation.main(
-        data_folder=Path(data_folder),
-        output_segmented_folder=Path(results_folder),
-        intermediate_segmented_folder=Path(scratch_folder),
-        smartspim_config=smartspim_config,
-    )
+    smartspim_cell_detection(**puncta_params)
 
 
 if __name__ == "__main__":
+    # cProfile.run('main()', filename="/results/compute_costs.dat")
     run()

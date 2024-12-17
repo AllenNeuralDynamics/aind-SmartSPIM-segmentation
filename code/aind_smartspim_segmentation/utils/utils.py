@@ -1,393 +1,18 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Mon Nov 28 12:23:13 2022
-
-@author: nicholas.lusk
-@Modified by: camilo.laiton
+Utility functions
 """
 
-import importlib
-import json
 import logging
 import multiprocessing
 import os
 import platform
 import time
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional
 
-import dask
 import matplotlib.pyplot as plt
-import numpy as np
 import psutil
-from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
-from astropy.stats import SigmaClip
-from cellfinder_core.detect import detect
-from photutils.background import Background2D
-from scipy import ndimage as ndi
-from scipy.signal import argrelmin
-
-from .._shared.types import ArrayLike, PathLike
-from .pymusica import musica
-
-
-@dask.delayed
-def delay_astro(
-    img: ArrayLike,
-    estimator: str = "MedianBackground",
-    box: Tuple[int] = (50, 50),
-    filt: Tuple[int] = (3, 3),
-    sig_clip: int = 3,
-    pad: int = 0,
-    reflect: int = 0,
-    amplify: bool = False,
-    smooth: bool = False,
-):
-    """
-    Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
-    for contrast enhancement and statistical background subtraction
-
-    Parameters
-    ----------
-    img : array
-        Dask array of lightsheet data. the first dimension should be the Z plane
-    estimator : str
-        one of the background options provided by https://photutils.readthedocs.io/en/stable/background.html
-    box : tuple, optional
-        dimensions in pixels for each tile for background subtraction. The default is (50, 50).
-    filt : tuple, optional
-        filter size for estimator within each tile. The default is (3, 3).
-    sig_clip : int, optional
-        standard deviation above the mean for masking pixel for background subtraction. The default is 3.
-    pad : int, optional
-        number of pixels of padding applied to image. usually only apllies if running on subsection. The default is 0.
-    smooth : boolean, optional
-        whether to apply 3D gaussian smoothing over array. The default is False.
-
-    Returns
-    -------
-    bkg_sub_array : array
-        dask array with preprocessed images
-
-    """
-
-    if reflect != 0:
-        img = np.pad(img, reflect, mode="reflect")
-
-    if pad != 0:
-        img = np.pad(img, pad, mode="constant", constant_values=0)
-
-    # print(img.shape)
-
-    # get estimator function for background subtraction
-    est = getattr(importlib.import_module("photutils.background"), estimator)
-
-    # set parameters for Laplacian pyramid
-    L = 5
-    params_m = {"M": 1023.0, "a": np.full(L, 11), "p": 0.7}
-    backgrounds = []
-    for depth in range(img.shape[0]):
-        curr_img = img[depth, :, :].copy()
-
-        sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
-
-        # check if padding has been added and mask regions accordingly
-        if pad > 0:
-            if depth >= pad or depth < (img.shape[0] - pad):
-                # create boolean mask over padded region
-                mask = np.full(curr_img.shape, True)
-                mask[pad:-pad, pad:-pad] = False
-
-                # calculate Laplacian Pyramid
-                if amplify:
-                    curr_img[pad:-pad, pad:-pad] = musica(curr_img[pad:-pad, pad:-pad], L, params_m)
-
-                # get background statistics
-                bkg = Background2D(
-                    curr_img,
-                    box_size=box,
-                    filter_size=filt,
-                    bkg_estimator=est(),
-                    fill_value=0.0,
-                    sigma_clip=sigma_clip,
-                    coverage_mask=mask,
-                    exclude_percentile=100,
-                )
-
-        else:
-            # calculate Laplacian Pyramid
-            if amplify:
-                curr_img = musica(curr_img, L, params_m)
-
-            # get background statistics
-            bkg = Background2D(
-                curr_img,
-                box_size=box,
-                filter_size=filt,
-                bkg_estimator=est(),
-                fill_value=0.0,
-                sigma_clip=sigma_clip,
-                exclude_percentile=100,
-            )
-
-        # subtract background and clip min to 0
-        curr_img = curr_img - bkg.background
-        curr_img = np.where(curr_img < 0, 0, curr_img)
-
-        img[depth, :, :] = curr_img.astype("uint16")
-        backgrounds.append([bkg.background.mean(), bkg.background.std()])
-        del curr_img, bkg
-
-    # smooth over Z plan with gaussian filter
-    if smooth:
-        img = ndi.gaussian_filter(img, sigma=1.0, mode="constant", cval=0, truncate=2)
-
-    return img
-
-
-@dask.delayed
-def delay_detect(
-    img: ArrayLike,
-    save_path: PathLike,
-    count: int,
-    offset: int,
-    padding: int,
-    process_by,
-    smartspim_config: dict,
-):
-    """
-    Delayed function to run cellfinder
-    main script.
-    """
-    cells = detect.main(
-        signal_array=np.asarray(img),
-        save_path=save_path,
-        block=count,
-        offset=offset,
-        padding=padding,
-        process_by=process_by,
-        **smartspim_config,
-    )
-
-    return cells
-
-
-def find_good_blocks(img, counts, chunk, ds=3):
-    """
-    Function to Identify good blocks to process
-    using downsampled zarr
-
-    Parameters
-    ----------
-    img : da.array
-        dask array of low resolution image
-    counts : list[int]
-        chunks per dimension of level 0 array.
-    chunk : int
-        chunk size used for cell detection
-    ds : int
-        the factor by which the array is downsampled
-
-    Returns
-    -------
-    block_dict : dict
-        dictionary with information on which blocks to
-        process. key = block number and value = bool
-
-    """
-    if isinstance(img, dask.array.core.Array):
-        img = np.asarray(img)
-
-    img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
-    count, bin_count = np.histogram(
-        img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True
-    )
-
-    try:
-        thresh = argrelmin(count, order=10)[0][0]
-    except IndexError:
-        thresh = 100
-
-    img_binary = np.where(img >= thresh, 1, 0)
-
-    cz = int(chunk / 2**ds)
-    dims = list(img_binary.shape)
-
-    b = 0
-    block_dict = {}
-
-    """ there are rare occasions where the level 0 and
-    level 3 array disagree on chuncks so have some
-    catches to account for that """
-    for z in range(counts[0]):
-        z_l, z_u = z * cz, (z + 1) * cz
-        if z_l > dims[0] - 1:
-            z_l = dims[0] - 2
-        if z_u > dims[0] - 1:
-            z_u = dims[0] - 1
-        for y in range(counts[1]):
-            y_l, y_u = y * cz, (y + 1) * cz
-            if y_l > dims[1] - 1:
-                y_l = dims[1] - 2
-            if y_u > dims[1] - 1:
-                y_u = dims[1] - 1
-            for x in range(counts[2]):
-                x_l, x_u = x * cz, (x + 1) * cz
-                if x_l > dims[2] - 1:
-                    x_l = dims[2] - 2
-                if x_u > dims[2] - 1:
-                    x_u = dims[2] - 1
-
-                block = img_binary[
-                    z_l:z_u,
-                    y_l:y_u,
-                    x_l:x_u,
-                ]
-
-                if np.sum(block) > 0:
-                    block_dict[b] = True
-                else:
-                    block_dict[b] = False
-
-                b += 1
-
-    return block_dict
-
-
-def create_logger(output_log_path: PathLike):
-    """
-    Creates a logger that generates
-    output logs to a specific path.
-
-    Parameters
-    ------------
-    output_log_path: PathLike
-        Path where the log is going
-        to be stored
-
-    Returns
-    -----------
-    logging.Logger
-        Created logger pointing to
-        the file path.
-    """
-
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    LOGS_FILE = f"{output_log_path}/fusion_log_{CURR_DATE_TIME}.log"
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s : %(message)s",
-        datefmt="%Y-%m-%d %H:%M",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "a"),
-        ],
-        force=True,
-    )
-
-    logging.disable("DEBUG")
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-
-    return logger
-
-
-def read_json_as_dict(filepath: str):
-    """
-    Reads a json as dictionary.
-
-    Parameters
-    ------------------------
-
-    filepath: PathLike
-        Path where the json is located.
-
-    Returns
-    ------------------------
-
-    dict:
-        Dictionary with the data the json has.
-
-    """
-
-    dictionary = {}
-
-    if os.path.exists(filepath):
-        with open(filepath) as json_file:
-            dictionary = json.load(json_file)
-
-    return dictionary
-
-
-def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
-    """
-    Create new folders.
-    Parameters
-    ------------------------
-    dest_dir: PathLike
-        Path where the folder will be created if it does not exist.
-    verbose: Optional[bool]
-        If we want to show information about the folder status. Default False.
-    Raises
-    ------------------------
-    OSError:
-        if the folder exists.
-    """
-
-    if not (os.path.exists(dest_dir)):
-        try:
-            if verbose:
-                print(f"Creating new directory: {dest_dir}")
-            os.makedirs(dest_dir)
-        except OSError as e:
-            if e.errno != os.errno.EEXIST:
-                raise
-
-
-def generate_processing(
-    data_processes: List[DataProcess],
-    dest_processing: PathLike,
-    processor_full_name: str,
-    pipeline_version: str,
-):
-    """
-    Generates data description for the output folder.
-
-    Parameters
-    ------------------------
-
-    data_processes: List[dict]
-        List with the processes aplied in the pipeline.
-
-    dest_processing: PathLike
-        Path where the processing file will be placed.
-
-    processor_full_name: str
-        Person in charged of running the pipeline
-        for this data asset
-
-    pipeline_version: str
-        Terastitcher pipeline version
-
-    """
-    # flake8: noqa: E501
-    processing_pipeline = PipelineProcess(
-        data_processes=data_processes,
-        processor_full_name=processor_full_name,
-        pipeline_version=pipeline_version,
-        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
-        note="Metadata for segmentation step",
-    )
-
-    processing = Processing(
-        processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata of cell segmentation \
-            and needs to be compiled with other steps at the end",
-    )
-
-    processing.write_standard_file(output_directory=dest_processing)
+import json
 
 
 def profile_resources(
@@ -506,6 +131,44 @@ def stop_child_process(process: multiprocessing.Process):
     process.join()
 
 
+def create_logger(output_log_path: str) -> logging.Logger:
+    """
+    Creates a logger that generates
+    output logs to a specific path.
+
+    Parameters
+    ------------
+    output_log_path: PathLike
+        Path where the log is going
+        to be stored
+
+    Returns
+    -----------
+    logging.Logger
+        Created logger pointing to
+        the file path.
+    """
+    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    LOGS_FILE = f"{output_log_path}/puncta_log.log"  # _{CURR_DATE_TIME}
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s : %(message)s",
+        datefmt="%Y-%m-%d %H:%M",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(LOGS_FILE, "w"),
+        ],
+        force=True,
+    )
+
+    logging.disable("DEBUG")
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    return logger
+
+
 def get_size(bytes, suffix: str = "B") -> str:
     """
     Scale bytes to its proper format
@@ -527,6 +190,7 @@ def get_size(bytes, suffix: str = "B") -> str:
             return f"{bytes:.2f}{unit}{suffix}"
         bytes /= factor
 
+
 def get_code_ocean_cpu_limit():
     """
     Gets the Code Ocean capsule CPU limit
@@ -544,20 +208,14 @@ def get_code_ocean_cpu_limit():
         return co_cpus
     if aws_batch_job_id:
         return 1
-    
-    try:
-        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fp:
-            cfs_quota_us = int(fp.read())
-        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fp:
-            cfs_period_us = int(fp.read())
-        
-        container_cpus = cfs_quota_us // cfs_period_us
-
-    except FileNotFoundError as e:
-        container_cpus = 0
-
+    with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fp:
+        cfs_quota_us = int(fp.read())
+    with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fp:
+        cfs_period_us = int(fp.read())
+    container_cpus = cfs_quota_us // cfs_period_us
     # For physical machine, the `cfs_quota_us` could be '-1'
     return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
+
 
 def print_system_information(logger: logging.Logger):
     """
@@ -568,17 +226,12 @@ def print_system_information(logger: logging.Logger):
     logger: logging.Logger
         Logger object
     """
-    co_memory = os.environ.get("CO_MEMORY")
-    co_memory = int(co_memory) if co_memory else None
-
+    co_memory = int(os.environ.get("CO_MEMORY"))
     # System info
-    sep = "=" * 40
+    sep = "=" * 20
     logger.info(f"{sep} Code Ocean Information {sep}")
     logger.info(f"Code Ocean assigned cores: {get_code_ocean_cpu_limit()}")
-
-    if co_memory:
-        logger.info(f"Code Ocean assigned memory: {get_size(co_memory)}")
-
+    logger.info(f"Code Ocean assigned memory: {get_size(co_memory)}")
     logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
     logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
     logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
@@ -653,3 +306,107 @@ def print_system_information(logger: logging.Logger):
     net_io = psutil.net_io_counters()
     logger.info(f"Total Bytes Sent: {get_size(net_io.bytes_sent)}")
     logger.info(f"Total Bytes Received: {get_size(net_io.bytes_recv)}")
+
+
+def create_folder(dest_dir: str, verbose: Optional[bool] = False) -> None:
+    """
+    Create new folders.
+
+    Parameters
+    ------------------------
+
+    dest_dir: str
+        Path where the folder will be created if it does not exist.
+
+    verbose: Optional[bool]
+        If we want to show information about the folder status. Default False.
+
+    Raises
+    ------------------------
+
+    OSError:
+        if the folder exists.
+
+    """
+
+    if not (os.path.exists(dest_dir)):
+        try:
+            if verbose:
+                print(f"Creating new directory: {dest_dir}")
+            os.makedirs(dest_dir)
+        except OSError as e:
+            if e.errno != os.errno.EEXIST:
+                raise
+
+
+def parse_zarr_metadata(metadata: Dict, multiscale: Optional[str] = None) -> Dict:
+    """
+    Parses the zarr metadata and retrieves
+    the metadata we need in the correct format.
+
+    Parameters
+    ----------
+    metadata: Dict
+        Metadata dictionary that contains ".zattrs" and
+        ".zarray"
+
+    multiscale: Optional[str]
+        Multiscale we're retieving the metadata for.
+        Default: None
+
+    Returns
+    -------
+    Dict
+        Dictionary with the metadata we need
+    """
+    parsed_metadata = {"axes": {}}
+    zattrs = metadata.get(".zattrs")
+    # zarray = metadata.get('.zarray')
+
+    if zattrs is not None:
+        multiscales = zattrs.get("multiscales")[0]
+        axes = multiscales.get("axes")
+        datasets = multiscales.get("datasets")
+
+        dataset_res = None
+
+        for d in datasets:
+            if d["path"] == multiscale:
+                dataset_res = d["coordinateTransformations"][0]["scale"]
+                break
+
+        for idx in range(len(axes)):
+            ax = axes[idx]
+            parsed_metadata["axes"][ax["name"]] = {
+                "unit": ax.get("unit"),
+                "type": ax.get("type"),
+                "scale": dataset_res[idx],
+            }
+
+    return parsed_metadata
+
+def read_json_as_dict(filepath: str):
+    """
+    Reads a json as dictionary.
+
+    Parameters
+    ------------------------
+
+    filepath: PathLike
+        Path where the json is located.
+
+    Returns
+    ------------------------
+
+    dict:
+        Dictionary with the data the json has.
+
+    """
+
+    dictionary = {}
+
+    if os.path.exists(filepath):
+        with open(filepath) as json_file:
+            dictionary = json.load(json_file)
+
+    return dictionary

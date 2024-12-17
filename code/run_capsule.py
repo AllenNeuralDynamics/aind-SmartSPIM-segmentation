@@ -4,8 +4,9 @@ Scripts that runs the Code Ocean capsule
 
 import os
 import shutil
+from glob import glob
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.utils import utils
@@ -45,7 +46,10 @@ def get_data_config(
     # Returning first smartspim dataset found
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
-
+    print(
+        glob(f"{data_folder}/{processing_manifest_path}"),
+        f"{data_folder}/{processing_manifest_path}",
+    )
     processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
     derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
@@ -94,9 +98,9 @@ def run():
     """
 
     # Code Ocean folders
-    RESULTS_FOLDER = Path(os.path.abspath("../results"))
+    RESULTS_FOLDER = Path(os.path.abspath("../../../results"))
     # SCRATCH_FOLDER = Path(os.path.abspath("../scratch"))
-    DATA_FOLDER = Path(os.path.abspath("../data"))
+    DATA_FOLDER = Path(os.path.abspath("../../../data"))
 
     # It is assumed that these files
     # will be in the data folder
@@ -108,20 +112,21 @@ def run():
         raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
     pipeline_config, smartspim_dataset_name = get_data_config(
-        data_folder=data_folder,
+        data_folder=DATA_FOLDER,
         results_folder=RESULTS_FOLDER,
     )
 
-    input_channel = f"{pipeline_config['segmentation']['channel']}.zarr"
+    input_channel = f"{pipeline_config['pipeline_processing']['segmentation']['channel']}.zarr"
 
     DATA_PATH = f"{DATA_FOLDER}/{input_channel}"
     SEGMENTATION_PATH = None
 
     # Output folder
-    output_folder = RESULTS_FOLDER.joinpath(f"cell_{pipeline_config['segmentation']['channel']}")
+    output_folder = RESULTS_FOLDER.joinpath(
+        f"cell_{pipeline_config['pipeline_processing']['segmentation']['channel']}"
+    )
     metadata_path = output_folder.joinpath("metadata")
 
-    utils.create_folder(dest_dir=str(output_folder), verbose=True)
     utils.create_folder(dest_dir=str(metadata_path), verbose=True)
 
     logger = utils.create_logger(output_log_path=str(metadata_path))
@@ -148,6 +153,7 @@ def run():
         "batch_size": 1,
         "axis_pad": axis_pad,
         "output_folder": output_folder,
+        "metadata_path": metadata_path,
         "logger": logger,
         "super_chunksize": None,
         "spot_parameters": {
@@ -166,6 +172,16 @@ def run():
     )
 
     smartspim_cell_detection(**puncta_params)
+
+    # generate_neuroglancer_link(
+    #     image_path,
+    #     smartspim_config["name"],
+    #     smartspim_config["channel"],
+    #     detected_cells_path,
+    #     smartspim_config["save_path"],
+    #     smartspim_config["cellfinder_params"]["voxel_sizes"],
+    #     logger,
+    # )
 
 
 if __name__ == "__main__":

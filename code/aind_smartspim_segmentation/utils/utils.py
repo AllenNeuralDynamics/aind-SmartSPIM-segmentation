@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import psutil
+from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
 
 
 def profile_resources(
@@ -409,3 +410,47 @@ def read_json_as_dict(filepath: str):
             dictionary = json.load(json_file)
 
     return dictionary
+
+
+def generate_processing(
+    data_processes: List[DataProcess],
+    dest_processing: str,
+    processor_full_name: str,
+    pipeline_version: str,
+):
+    """
+    Generates data description for the output folder.
+
+    Parameters
+    ------------------------
+
+    data_processes: List[dict]
+        List with the processes aplied in the pipeline.
+
+    dest_processing: PathLike
+        Path where the processing file will be placed.
+
+    processor_full_name: str
+        Person in charged of running the pipeline
+        for this data asset
+
+    pipeline_version: str
+        Terastitcher pipeline version
+
+    """
+    # flake8: noqa: E501
+    processing_pipeline = PipelineProcess(
+        data_processes=data_processes,
+        processor_full_name=processor_full_name,
+        pipeline_version=pipeline_version,
+        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
+        note="Metadata for segmentation step",
+    )
+
+    processing = Processing(
+        processing_pipeline=processing_pipeline,
+        notes="This processing only contains metadata of cell segmentation \
+            and needs to be compiled with other steps at the end",
+    )
+
+    processing.write_standard_file(output_directory=dest_processing)

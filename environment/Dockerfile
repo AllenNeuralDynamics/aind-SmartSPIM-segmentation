@@ -7,10 +7,11 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git \
-    numpy==1.24.4 \
+    aind-large-scale-prediction==1.0.0 \
+    numpy==1.26.4 \
     scikit-image==0.22.0 \
     matplotlib==3.8.2 \
     scipy==1.10.1 \
-    cupy-cuda11x \
-    neuroglancer
+    cupy-cuda11x==13.3.0 \
+    neuroglancer==2.40.1 \
+    aind-data-schema==1.2.0

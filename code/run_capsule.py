@@ -3,11 +3,13 @@ Scripts that runs the Code Ocean capsule
 """
 
 import os
+import shutil
 from pathlib import Path
+from typing import Tuple
 
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.utils import utils
-import shutil
+
 
 def get_data_config(
     data_folder: str,
@@ -58,6 +60,7 @@ def get_data_config(
 
     return derivatives_dict, smartspim_dataset
 
+
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """
     Validates input elemts for a capsule in
@@ -84,6 +87,7 @@ def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
 
     return missing_inputs
 
+
 def run():
     """
     Run function
@@ -104,7 +108,8 @@ def run():
         raise ValueError(f"We miss the following files in the capsule input: {missing_files}")
 
     pipeline_config, smartspim_dataset_name = get_data_config(
-        data_folder=data_folder, results_folder=RESULTS_FOLDER,
+        data_folder=data_folder,
+        results_folder=RESULTS_FOLDER,
     )
 
     input_channel = f"{pipeline_config['segmentation']['channel']}.zarr"
@@ -115,10 +120,10 @@ def run():
     # Output folder
     output_folder = RESULTS_FOLDER.joinpath(f"cell_{pipeline_config['segmentation']['channel']}")
     metadata_path = output_folder.joinpath("metadata")
-    
+
     utils.create_folder(dest_dir=str(output_folder), verbose=True)
     utils.create_folder(dest_dir=str(metadata_path), verbose=True)
-    
+
     logger = utils.create_logger(output_log_path=str(metadata_path))
 
     # Puncta detection parameters

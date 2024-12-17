@@ -2,6 +2,7 @@
 Utility functions
 """
 
+import json
 import logging
 import multiprocessing
 import os
@@ -12,7 +13,6 @@ from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import psutil
-import json
 
 
 def profile_resources(
@@ -249,9 +249,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"{sep} Boot Time {sep}")
     boot_time_timestamp = psutil.boot_time()
     bt = datetime.fromtimestamp(boot_time_timestamp)
-    logger.info(
-        f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
-    )
+    logger.info(f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}")
 
     # CPU info
     logger.info(f"{sep} CPU Info {sep}")
@@ -384,6 +382,7 @@ def parse_zarr_metadata(metadata: Dict, multiscale: Optional[str] = None) -> Dic
             }
 
     return parsed_metadata
+
 
 def read_json_as_dict(filepath: str):
     """

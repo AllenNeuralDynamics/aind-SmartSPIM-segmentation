@@ -10,8 +10,8 @@ from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-from aind_smartspim_segmentation.detect import smartspim_cell_detection
-from aind_smartspim_segmentation.utils import utils
+from aind_smartspim_cell_proposals.detect import smartspim_cell_detection
+from aind_smartspim_cell_proposals.utils import utils
 from ng_link import NgState
 from ng_link.ng_state import get_points_from_xml
 

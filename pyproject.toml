@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind_smartspim_cell_proposals"
 description = "Identifies cell proposals from SmartSPIM datasets."
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 authors = [
     {name = "Allen Institute for Neural Dynamics"}
 ]
@@ -17,7 +17,7 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'aind-large-scale-prediction==1.0.0',
+    'aind-large-scale-prediction @ git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@py38-compatible',    
     'numpy==1.26.4',
     'scikit-image==0.22.0',
     'matplotlib==3.8.2',
@@ -25,7 +25,6 @@ dependencies = [
     'cupy-cuda11x==13.3.0',
     'neuroglancer==2.40.1',
     'aind-data-schema==1.2.0'
-
 ]
 
 [project.optional-dependencies]
@@ -41,7 +40,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["code/aind_smartspim_cell_proposals"]
+where = ["code"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aind_smartspim_cell_proposals.__version__"}

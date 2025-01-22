@@ -32,7 +32,7 @@ from .__init__ import __pipeline_version__, __version__
 from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
-from .traditional_detection.puncta_detection_optimized import (
+from .traditional_detection.puncta_detection import (
     prune_blobs,
     traditional_3D_spot_detection,
 )

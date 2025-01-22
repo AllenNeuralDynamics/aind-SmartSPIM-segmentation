@@ -7,7 +7,7 @@ ARG GIT_ACCESS_TOKEN
 COPY git-askpass /
 
 RUN pip install -U --no-cache-dir \
-    aind-large-scale-prediction==1.0.0 \
+    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@py38-compatible \
     numpy==1.26.4 \
     scikit-image==0.22.0 \
     matplotlib==3.8.2 \

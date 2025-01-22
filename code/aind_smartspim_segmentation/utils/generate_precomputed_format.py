@@ -14,7 +14,6 @@ from multiprocessing.managers import BaseManager, NamespaceProxy
 from pathlib import Path
 from typing import Dict, List, Union
 
-import neuroglancer
 import numpy as np
 
 from . import utils
@@ -25,9 +24,13 @@ SourceLike = Union[PathLike, List[Dict]]
 
 
 class ObjProxy(NamespaceProxy):
-    """Returns a proxy instance for any user defined data-type. The proxy instance will have the namespace and
-    functions of the data-type (except private/protected callables/attributes). Furthermore, the proxy will be
-    pickable and can its state can be shared among different processes."""
+    """
+    Returns a proxy instance for any user defined data-type.
+    The proxy instance will have the namespace and functions
+    of the data-type (except private/protected callables/attributes).
+    Furthermore, the proxy will be pickable and can its state can be
+    shared among different processes.
+    """
 
     @classmethod
     def populate_obj_attributes(cls, real_cls):

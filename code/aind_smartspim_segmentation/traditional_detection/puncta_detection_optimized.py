@@ -274,7 +274,42 @@ def fit_gaussian(S, fit_sigmas, r):
 
 
 def intensity_integrated_gaussian3D(center, sigmas, limit) -> ArrayLike:
-    """"""
+    """
+    Calculates the integrated intensity of a 3D Gaussian distribution over a voxel grid.
+
+    This function computes the volume integral of a 3D Gaussian function by using
+    the error function (erf) to analytically solve the integral over each voxel.
+    The calculation is done independently for each dimension and then combined
+    through multiplication.
+
+    Parameters
+    ----------
+    center : ArrayLike
+        The coordinates (x, y, z) of the Gaussian center. Should be a sequence
+        of 3 floating-point numbers.
+    sigmas : ArrayLike
+        The standard deviations (σx, σy, σz) of the Gaussian in each dimension.
+        Should be a sequence of 3 positive floating-point numbers.
+    limit : int
+        The size of the calculation grid in each dimension.
+
+    Returns
+    -------
+    ArrayLike
+        A 3D array of shape (limit, limit, limit) containing the integrated
+        Gaussian intensities for each voxel.
+
+    Notes
+    -----
+    The function works by:
+    1. Creating integration bounds at ±0.5 around each voxel center
+    2. Computing the error function for these bounds
+    3. Taking the difference to get the integrated intensity
+    4. Multiplying the results from each dimension
+
+    The error function integration accounts for the total probability contained
+    within each voxel boundary.
+    """
     # Create an array of shape (2, len(sigmas), limit) with values -0.5 and 0.5
     d_values = np.array([[-0.5, 0.5]], dtype=np.float32).reshape(2, 1, 1)
 

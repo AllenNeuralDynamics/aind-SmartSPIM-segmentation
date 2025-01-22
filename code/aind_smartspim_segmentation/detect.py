@@ -5,6 +5,7 @@ Large-scale puncta detection using single GPU
 import logging
 import multiprocessing
 import os
+import warnings
 
 # from functools import partial
 from time import time
@@ -116,7 +117,29 @@ def remove_points_in_pad_area(points: ArrayLike, unpadded_slices: Tuple[slice]) 
     return unpadded_points
 
 
-def validate_chunk(data):
+def validate_chunk(data: ArrayLike) -> bool:
+    """
+    Function that validates if a chunk should be processed or not.
+
+    Parameters
+    ----------
+    data: ArrayLike
+        Block of data that needs to be processed.
+
+    Returns
+    -------
+        bool: Boolean that determines if a block needs to be processed or not.
+
+    .. deprecated:: 0.0.7
+       There will be a segmentation mask for the whole brain
+       coming from the SmartSPIM pipeline.
+    """
+    warnings.warn(
+        "validate_chunk() is deprecated since version 0.0.7 and will be " "removed in 0.0.8.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     # Apply Gaussian smoothing to reduce noise
     smoothed_img = gaussian_filter(data, sigma=5.0, mode="constant", cval=0)
 
@@ -199,9 +222,11 @@ def execute_worker(
     # Processing batch
     for batch_idx in range(0, data.shape[0]):
         curr_block = cupy.squeeze(data_block_cupy[batch_idx, ...])
-        logger.info(
-            f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {data.shape[0]} - Data shape: {data.shape} - Current block: {curr_block.shape}"
+        message = (
+            f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {data.shape[0]}"
+            f"- Data shape: {data.shape} - Current block: {curr_block.shape}"
         )
+        logger.info(message)
 
         # Making sure CuPy it's running in the correct device
         spots = traditional_3D_spot_detection(
@@ -257,9 +282,12 @@ def execute_worker(
                 points=curr_spots, unpadded_slices=unpadded_global_slice
             )
 
-            logger.info(
-                f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx} - Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos} - upadded global coords: {unpadded_global_slice}"
+            message = (
+                f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx}"
+                f"- Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos}"
+                f"- upadded global coords: {unpadded_global_slice}"
             )
+            logger.info(message)
 
             # Adding spots to the worker batch
             if global_worker_spots is None:
@@ -402,9 +430,11 @@ def smartspim_cell_detection(
         overlap_prediction_chunksize = (0, axis_pad, axis_pad, axis_pad)
         prediction_chunksize = (lazy_data.shape[-4],) + prediction_chunksize
 
-        logger.info(
-            f"Segmentation mask provided! New prediction chunksize: {prediction_chunksize} - New overlap: {overlap_prediction_chunksize}"
+        message = (
+            f"Segmentation mask provided! New prediction chunksize: {prediction_chunksize}"
+            f" - New overlap: {overlap_prediction_chunksize}"
         )
+        logger.info(message)
 
     else:
         # No segmentation mask
@@ -461,9 +491,11 @@ def smartspim_cell_detection(
         locked_array=False,
     )
 
-    logger.info(
-        f"Running puncta detection in chunked data. Prediction chunksize: {prediction_chunksize} - Overlap chunksize: {overlap_prediction_chunksize}"
+    message = (
+        f"Running puncta detection in chunked data. Prediction chunksize: {prediction_chunksize}"
+        f"- Overlap chunksize: {overlap_prediction_chunksize}"
     )
+    logger.info(message)
 
     start_time = time()
 
@@ -487,9 +519,12 @@ def smartspim_cell_detection(
     with cupy.cuda.Device(device=device):
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):
-                logger.info(
-                    f"Batch {i}: {sample.batch_tensor.shape} - Pinned?: {sample.batch_tensor.is_pinned()} - dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
+                message = (
+                    f"Batch {i}: {sample.batch_tensor.shape} - "
+                    f"Pinned?: {sample.batch_tensor.is_pinned()} - "
+                    f"dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
                 )
+                logger.info(message)
 
                 # start_spot_time = time()
 
@@ -547,9 +582,11 @@ def smartspim_cell_detection(
                             )
 
                 if i + samples_per_iter > total_batches:
-                    logger.info(
-                        f"Not enough samples to retrieve from workers, remaining: {i + samples_per_iter - total_batches}"
+                    message = (
+                        f"Not enough samples to retrieve from workers, remaining"
+                        f": {i + samples_per_iter - total_batches}"
                     )
+                    logger.info(message)
                     break
 
     if curr_picked_blocks != 0:
@@ -600,14 +637,17 @@ def smartspim_cell_detection(
         # Final prunning, might be spots in boundaries where spots where splitted
         start_final_prunning_time = time()
         spots_global_coordinate_prunned, removed_pos = prune_blobs(
-            blobs_array=spots_global_coordinate.copy(),  # Prunning only ZYX locations, careful with Masks IDs
+            # Prunning only ZYX locations, careful with Masks IDs
+            blobs_array=spots_global_coordinate.copy(),
             distance=spot_parameters["min_zyx"][-1] + spot_parameters["radius_confidence"],
         )
         end_final_prunning_time = time()
 
-        logger.info(
-            f"Time taken for final prunning {end_final_prunning_time - start_final_prunning_time} before: {len(spots_global_coordinate)} After: {len(spots_global_coordinate_prunned)}"
+        message = (
+            f"Time taken for final prunning {end_final_prunning_time - start_final_prunning_time}"
+            f"before: {len(spots_global_coordinate)} After: {len(spots_global_coordinate_prunned)}"
         )
+        logger.info(message)
 
         # TODO add chunked precomputed format for points with multiscales
         coord_space = CoordinateSpace(
@@ -646,6 +686,15 @@ def smartspim_cell_detection(
                 parameters={
                     "multiscale": multiscale,
                     "spot_parameters": spot_parameters,
+                    "segmentation_mask_path": segmentation_mask_path,
+                    "scheduler_params": {
+                        "prediction_chunksize": prediction_chunksize,
+                        "target_size_mb": target_size_mb,
+                        "n_workers": n_workers,
+                        "axis_pad": axis_pad,
+                        "batch_size": batch_size,
+                    },
+                    "output_folder": output_folder,
                 },
                 notes=f"Detecting cells in path: {dataset_path}",
             )

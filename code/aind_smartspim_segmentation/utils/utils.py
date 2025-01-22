@@ -444,12 +444,12 @@ def generate_processing(
         processor_full_name=processor_full_name,
         pipeline_version=pipeline_version,
         pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
-        note="Metadata for segmentation step",
+        note="Metadata for cell proposal detection step",
     )
 
     processing = Processing(
         processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata of cell segmentation \
+        notes="This processing only contains metadata of cell proposals \
             and needs to be compiled with other steps at the end",
     )
 

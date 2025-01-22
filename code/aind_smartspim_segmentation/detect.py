@@ -27,7 +27,7 @@ from neuroglancer import CoordinateSpace
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
-from .__init__ import __version__
+from .__init__ import __maintainers__, __pipeline_version__, __version__
 from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
@@ -469,7 +469,7 @@ def smartspim_cell_detection(
             code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
             code_version=__version__,
             parameters={},
-            notes="Importing fused data for cell segmentation",
+            notes="Importing fused data for cell proposal detection.",
         )
     )
 
@@ -696,7 +696,7 @@ def smartspim_cell_detection(
                     },
                     "output_folder": output_folder,
                 },
-                notes=f"Detecting cells in path: {dataset_path}",
+                notes=f"Detecting cell proposals in path: {dataset_path}",
             )
         )
 
@@ -704,7 +704,7 @@ def smartspim_cell_detection(
             data_processes=data_processes,
             dest_processing=str(metadata_path),
             processor_full_name="Camilo Laiton",
-            pipeline_version="3.0.0",
+            pipeline_version=__pipeline_version__,
         )
 
     # Getting tracked resources and plotting image

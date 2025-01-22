@@ -5,11 +5,10 @@ Large-scale puncta detection using single GPU
 import logging
 import multiprocessing
 import os
-from datetime import datetime
 
 # from functools import partial
 from time import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import cupy
 import numpy as np

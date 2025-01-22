@@ -2,6 +2,8 @@
 Scripts that runs the Code Ocean capsule
 """
 
+import json
+import logging
 import os
 import shutil
 from glob import glob
@@ -10,6 +12,110 @@ from typing import List, Tuple
 
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.utils import utils
+from ng_link import NgState
+from ng_link.ng_state import get_points_from_xml
+
+
+def generate_neuroglancer_link(
+    image_path: str,
+    dataset_name: str,
+    channel_name: str,
+    detected_cells_path: str,
+    output: str,
+    voxel_sizes: list,
+    logger: logging.Logger,
+    neuroglancer_domain: str = "https://aind-neuroglancer-sauujisjxq-uw.a.run.app",
+):
+    """
+    Generates neuroglancer link with the cell location
+    for a specific dataset
+
+    Parameters
+    -----------
+    image_path: str
+        Path to the zarr file
+
+    dataset_name: str
+        Dataset name where the data will be stored
+        in the cloud. Follows SmartSPIM_***_stitched_***
+
+    channel_name: str
+        Channel name that was processed
+
+    detected_cells_path: str
+        Path to the detected cells
+
+    output: str
+        Output path of the neuroglancer
+        config and precomputed format
+
+    voxel_sizes: list
+        list of um per voxel along each dimension
+        ordered [z, y, x]
+    """
+
+    logger.info(f"Reading cells from {detected_cells_path}")
+    cells = get_points_from_xml(detected_cells_path)
+
+    output_precomputed = os.path.join(output, "visualization/precomputed")
+    json_name = os.path.join(output, "visualization/neuroglancer_config.json")
+    utils.create_folder(output_precomputed)
+    print(f"Output cells precomputed: {output_precomputed}")
+
+    logger.info(f"Image path in {image_path}")
+    example_data = {
+        "dimensions": {
+            # check the order
+            "z": {"voxel_size": voxel_sizes[0], "unit": "microns"},
+            "y": {"voxel_size": voxel_sizes[1], "unit": "microns"},
+            "x": {"voxel_size": voxel_sizes[2], "unit": "microns"},
+            "t": {"voxel_size": 0.001, "unit": "seconds"},
+        },
+        "layers": [
+            {
+                "source": image_path,
+                "type": "image",
+                "channel": 0,
+                "shader": {"color": "gray", "emitter": "RGB", "vec": "vec3"},
+                "shaderControls": {"normalized": {"range": [0, 500]}},  # Optional
+            },
+            {
+                "type": "annotation",
+                "source": f"precomputed://{output_precomputed}",
+                "tool": "annotatePoint",
+                "name": "annotation_name_layer",
+                "annotations": cells,
+            },
+        ],
+    }
+    bucket_path = "aind-open-data"
+    neuroglancer_link = NgState(
+        input_config=example_data,
+        base_url=neuroglancer_domain,
+        mount_service="s3",
+        bucket_path=bucket_path,
+        output_json=os.path.join(output, "visualization"),
+        json_name=json_name,
+    )
+
+    json_state = neuroglancer_link.state
+    json_state["ng_link"] = (
+        f"{neuroglancer_domain}#!s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
+    )
+
+    json_state["layers"][0][
+        "source"
+    ] = f"zarr://s3://{bucket_path}/{dataset_name}/image_tile_fusing/OMEZarr/{channel_name}.zarr"
+
+    json_state["layers"][1][
+        "source"
+    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/precomputed"
+
+    logger.info(f"Visualization link: {json_state['ng_link']}")
+    output_path = os.path.join(output, json_name)
+
+    with open(output_path, "w") as outfile:
+        json.dump(json_state, outfile, indent=2)
 
 
 def get_data_config(
@@ -185,5 +291,4 @@ def run():
 
 
 if __name__ == "__main__":
-    # cProfile.run('main()', filename="/results/compute_costs.dat")
     run()

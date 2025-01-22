@@ -13,6 +13,7 @@ from typing import Dict, Optional, Tuple
 
 import cupy
 import numpy as np
+import pandas as pd
 import psutil
 import torch
 from aind_data_schema.core.processing import DataProcess, ProcessName
@@ -27,7 +28,7 @@ from neuroglancer import CoordinateSpace
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
-from .__init__ import __maintainers__, __pipeline_version__, __version__
+from .__init__ import __pipeline_version__, __version__
 from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
@@ -669,8 +670,29 @@ def smartspim_cell_detection(
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
-        # Saving spots
+        # Saving spots as numpy and csv
         np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
+
+        columns = ["Z", "Y", "X", "Z_center", "Y_center", "X_center", "dist", "r"]
+        sort_column = "Z"
+        int_columns = ["Z", "Y", "X"]
+
+        # If segmentation mask is provided, let's sort by ID
+        if segmentation_mask_path:
+            columns.append("SEG_ID")
+            sort_column = "SEG_ID"
+            int_columns.append("SEG_ID")
+
+        spots_df = pd.DataFrame(spots_global_coordinate_prunned, columns=columns)
+
+        spots_df[int_columns] = spots_df[int_columns].astype("int")
+        spots_df = spots_df.sort_values(by=sort_column)
+
+        # Saving spots
+        spots_df.to_csv(
+            f"{output_folder}/spots.csv",
+            index=False,
+        )
 
         data_processes.append(
             DataProcess(

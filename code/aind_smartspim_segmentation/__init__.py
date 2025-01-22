@@ -3,14 +3,8 @@ Module init file
 """
 
 __version__ = "0.0.7"
-__authors__ = [
-    "Camilo Laiton",
-    "Nicholas Lusk"
-]
-__author_emails__ = [
-    "camilo.laiton@alleninstitute.org",
-    "nicholas.lusk@alleninstitute.org"
-]
+__authors__ = ["Camilo Laiton", "Nicholas Lusk"]
+__author_emails__ = ["camilo.laiton@alleninstitute.org", "nicholas.lusk@alleninstitute.org"]
 __license__ = "MIT"
 __description__ = (
     "This version uses the spot detection algorithm from "
@@ -21,9 +15,6 @@ __description__ = (
 __url__ = "https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation"
 
 __maintainers__ = ["Camilo Laiton", "Nicholas Lusk"]
-__maintainer_emails__ = [
-    "camilo.laiton@alleninstitute.org",
-    "nicholas.lusk@alleninstitute.org"
-]
+__maintainer_emails__ = ["camilo.laiton@alleninstitute.org", "nicholas.lusk@alleninstitute.org"]
 __title__ = "aind-smartspim-cell-proposals"
 __status__ = "Development"  # 'Production', 'Beta'

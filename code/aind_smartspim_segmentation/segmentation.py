@@ -26,7 +26,7 @@ from natsort import natsorted
 from ng_link import NgState
 from ng_link.ng_state import get_points_from_xml
 
-from .__init__ import __version__
+from .__init__ import __maintainers__, __pipeline_version__, __version__
 from ._shared.types import PathLike
 from .utils import utils
 
@@ -113,8 +113,21 @@ def calculate_offsets(blocks, chunk_size):
                 )
     return offsets
 
+
 # Function missed during formatting check
 def cell_detection(smartspim_config: dict, logger: logging.Logger):
+    """
+    Runs cell proposal selection in a SmartSPIM brain.
+
+    Parameters
+    ----------
+    smartspim_config: dict
+        SmartSPIM configuration to identify cell proposals.
+
+    logger: logging.Logger
+        Logging object
+
+    """
     image_path = Path(smartspim_config["input_data"]).joinpath(
         f"{smartspim_config['input_channel']}/{smartspim_config['input_scale']}"
     )
@@ -251,7 +264,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
             arr = da.concatenate(results, axis=0, allow_unknown_chunksizes=True)
             _ = arr.compute()
             logger.info("Reseting client to try to avoid memory issues.")
-            client.restart(wait_for_workers = False)
+            client.restart(wait_for_workers=False)
 
     end_date_time = datetime.now()
 
@@ -343,6 +356,9 @@ def generate_neuroglancer_link(
     cells = get_points_from_xml(detected_cells_path)
 
     output_precomputed = os.path.join(output, "visualization/precomputed")
+    output_precomputed_after_classification = os.path.join(
+        output, "proposals_visualization/precomputed"
+    )
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
     utils.create_folder(output_precomputed)
     print(f"Output cells precomputed: {output_precomputed}")
@@ -383,10 +399,12 @@ def generate_neuroglancer_link(
         json_name=json_name,
     )
 
+    json_state_name = (
+        f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}"
+        f"/image_cell_segmentation/{channel_name}/proposals_visualization/neuroglancer_config.json"
+    )
     json_state = neuroglancer_link.state
-    json_state[
-        "ng_link"
-    ] = f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/neuroglancer_config.json"
+    json_state["ng_link"] = json_state_name
 
     json_state["layers"][0][
         "source"
@@ -394,7 +412,7 @@ def generate_neuroglancer_link(
 
     json_state["layers"][1][
         "source"
-    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/visualization/precomputed"
+    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/proposals_visualization/precomputed"
 
     logger.info(f"Visualization link: {json_state['ng_link']}")
     output_path = os.path.join(output, json_name)
@@ -404,8 +422,6 @@ def generate_neuroglancer_link(
 
 
 def main(
-    data_folder: PathLike,
-    output_segmented_folder: PathLike,
     intermediate_segmented_folder: PathLike,
     smartspim_config: dict,
 ):
@@ -414,13 +430,6 @@ def main(
 
     Parameters
     -----------
-    data_folder: PathLike
-        Path where the image data is located
-
-    output_segmented_folder: PathLike
-        Path where the OMEZarr and metadata will
-        live after fusion
-
     intermediate_segmented_folder: PathLike
         Path where the intermediate files
         will live. These will not be in the final
@@ -485,8 +494,8 @@ def main(
     utils.generate_processing(
         data_processes=data_processes,
         dest_processing=str(smartspim_config["metadata_path"]),
-        processor_full_name="Nicholas Lusk",
-        pipeline_version="1.5.0",
+        processor_full_name=__maintainers__[0],
+        pipeline_version=__pipeline_version__,
     )
 
     # Getting tracked resources and plotting image

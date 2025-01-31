@@ -200,9 +200,7 @@ def find_good_blocks(img, counts, chunk, ds=3):
         img = np.asarray(img)
 
     img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
-    count, bin_count = np.histogram(
-        img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True
-    )
+    count, bin_count = np.histogram(img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True)
 
     try:
         thresh = argrelmin(count, order=10)[0][0]
@@ -527,6 +525,7 @@ def get_size(bytes, suffix: str = "B") -> str:
             return f"{bytes:.2f}{unit}{suffix}"
         bytes /= factor
 
+
 def get_code_ocean_cpu_limit():
     """
     Gets the Code Ocean capsule CPU limit
@@ -544,13 +543,13 @@ def get_code_ocean_cpu_limit():
         return co_cpus
     if aws_batch_job_id:
         return 1
-    
+
     try:
         with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fp:
             cfs_quota_us = int(fp.read())
         with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fp:
             cfs_period_us = int(fp.read())
-        
+
         container_cpus = cfs_quota_us // cfs_period_us
 
     except FileNotFoundError as e:
@@ -558,6 +557,7 @@ def get_code_ocean_cpu_limit():
 
     # For physical machine, the `cfs_quota_us` could be '-1'
     return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
+
 
 def print_system_information(logger: logging.Logger):
     """
@@ -596,9 +596,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"{sep} Boot Time {sep}")
     boot_time_timestamp = psutil.boot_time()
     bt = datetime.fromtimestamp(boot_time_timestamp)
-    logger.info(
-        f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
-    )
+    logger.info(f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}")
 
     # CPU info
     logger.info(f"{sep} CPU Info {sep}")

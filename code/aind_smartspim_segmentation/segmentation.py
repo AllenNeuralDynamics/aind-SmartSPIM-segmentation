@@ -382,7 +382,7 @@ def generate_neuroglancer_link(
             },
             {
                 "type": "annotation",
-                "source": f"precomputed://{output_precomputed_after_classification}",
+                "source": f"precomputed://{output_precomputed}",
                 "tool": "annotatePoint",
                 "name": "annotation_name_layer",
                 "annotations": cells,

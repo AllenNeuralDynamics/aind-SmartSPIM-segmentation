@@ -183,8 +183,6 @@ def run():
     print("Final cell segmentation config: ", smartspim_config)
 
     segmentation.main(
-        data_folder=Path(data_folder),
-        output_segmented_folder=Path(results_folder),
         intermediate_segmented_folder=Path(scratch_folder),
         smartspim_config=smartspim_config,
     )

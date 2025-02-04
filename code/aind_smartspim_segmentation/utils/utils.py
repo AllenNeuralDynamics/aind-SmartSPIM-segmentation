@@ -385,6 +385,8 @@ def generate_processing(
             and needs to be compiled with other steps at the end",
     )
 
+    print(f"Generating detection processing in {dest_processing}: Processing: {processing}")
+
     processing.write_standard_file(output_directory=dest_processing)
 
 

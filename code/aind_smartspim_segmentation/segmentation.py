@@ -285,7 +285,7 @@ def cell_detection(smartspim_config: dict, logger: logging.Logger):
                 "mask_path": str(mask_path),
                 "smartspim_cell_config": smartspim_config,
             },
-            notes=f"Segmenting channel in path: {image_path}",
+            notes=f"Detecting proposals in channel in path: {image_path}",
         )
     )
 
@@ -357,7 +357,7 @@ def generate_neuroglancer_link(
 
     output_precomputed = os.path.join(output, "visualization/precomputed")
     output_precomputed_after_classification = os.path.join(
-        output, "proposals_visualization/precomputed"
+        output, "proposals/visualization/precomputed"
     )
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
     utils.create_folder(output_precomputed)
@@ -401,7 +401,7 @@ def generate_neuroglancer_link(
 
     json_state_name = (
         f"https://aind-neuroglancer-sauujisjxq-uw.a.run.app#!s3://{bucket_path}/{dataset_name}"
-        f"/image_cell_segmentation/{channel_name}/proposals_visualization/neuroglancer_config.json"
+        f"/image_cell_segmentation/{channel_name}/proposals/visualization/neuroglancer_config.json"
     )
     json_state = neuroglancer_link.state
     json_state["ng_link"] = json_state_name
@@ -412,7 +412,7 @@ def generate_neuroglancer_link(
 
     json_state["layers"][1][
         "source"
-    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/proposals_visualization/precomputed"
+    ] = f"precomputed://s3://{bucket_path}/{dataset_name}/image_cell_segmentation/{channel_name}/proposals/visualization/precomputed"
 
     logger.info(f"Visualization link: {json_state['ng_link']}")
     output_path = os.path.join(output, json_name)

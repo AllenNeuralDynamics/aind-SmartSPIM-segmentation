@@ -491,9 +491,12 @@ def main(
         logger,
     )
 
+    output_processing = Path(smartspim_config["metadata_path"])
+    print(f"Generating processing in: {output_processing} - {output_processing.exists()} ")
+
     utils.generate_processing(
         data_processes=data_processes,
-        dest_processing=str(smartspim_config["metadata_path"]),
+        dest_processing=str(output_processing),
         processor_full_name=__maintainers__[0],
         pipeline_version=__pipeline_version__,
     )

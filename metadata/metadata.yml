@@ -1,5 +1,5 @@
 metadata_version: 1
-name: aind-smartspim-cell-segmentation
+name: aind-smartspim-cell-segmentation-0.0.7
 description: A tool for automated segmentation of Cells or Nuclei from wholebrain
   lightsheet image volumes
 tags:

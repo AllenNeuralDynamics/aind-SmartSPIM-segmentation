@@ -1,16 +1,21 @@
 FROM continuumio/miniconda3:23.9.0-0
+LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y git g++
-RUN conda create -n cell_seg python=3.8 -y
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git g++ && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Make RUN commands use the new environment:
-SHELL ["conda", "run", "-n", "cell_seg", "/bin/bash", "-c"]
+RUN conda create -n cell_seg python=3.8 --no-default-packages -y && \
+    conda clean --all --yes
 
-RUN pip install -U --no-cache-dir \
+# Set environment path instead of using SHELL
+ENV PATH="/opt/conda/envs/cell_seg/bin:$PATH"
+
+RUN conda run -n cell_seg pip install --no-cache-dir \
     bokeh==2.4.2 \
-    dask[distributed]==2022.11.1 \
+    "dask[distributed]==2022.11.1" \
     dask_memusage \
     argschema==3.0.4 \
     natsort==8.2.0 \

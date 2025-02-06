@@ -1,6 +1,6 @@
 """Init file for cell segmentation"""
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 __authors__ = ["Nicholas Lusk", "Camilo Laiton"]
 __author_emails__ = [
     "nicholas.lusk@alleninstitute.org",

@@ -15,9 +15,9 @@ import os
 import platform
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Tuple
 
-from pathlib import Path
 import dask
 import matplotlib.pyplot as plt
 import numpy as np
@@ -655,6 +655,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Total Bytes Sent: {get_size(net_io.bytes_sent)}")
     logger.info(f"Total Bytes Received: {get_size(net_io.bytes_recv)}")
 
+
 def check_path_instance(obj: object) -> bool:
     """
     Checks if an objects belongs to pathlib.Path subclasses.
@@ -678,9 +679,8 @@ def check_path_instance(obj: object) -> bool:
 
     return False
 
-def save_dict_as_json(
-    filename: str, dictionary: dict, verbose: Optional[bool] = False
-) -> None:
+
+def save_dict_as_json(filename: str, dictionary: dict, verbose: Optional[bool] = False) -> None:
     """
     Saves a dictionary as a json file.
 

@@ -197,6 +197,10 @@ def run():
 
     else:
         print(f"No segmentation channel, pipeline config: {pipeline_config}")
+        utils.save_dict_as_json(
+            filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
+            dictionary=pipeline_config,
+        )
 
 
 if __name__ == "__main__":

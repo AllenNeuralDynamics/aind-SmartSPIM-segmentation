@@ -155,37 +155,45 @@ def run():
         data_folder=data_folder, results_folder=results_folder
     )
 
-    # get default configs
-    default_config = get_yaml(
-        os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
-    )
+    segmentation_info = pipeline_config.get("segmentation")
 
-    # add paths to default_config
-    default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
-    print("Files in path: ", os.listdir(default_config["input_data"]))
+    if segmentation_info is None:
+        raise ValueError("Please, provide segmentation channels.")
 
-    default_config["save_path"] = (
-        f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}"
-    )
-    default_config["metadata_path"] = (
-        f"{results_folder}/cell_{pipeline_config['segmentation']['channel']}/metadata"
-    )
+    channel_to_process = segmentation_info.get("channel")
 
-    print("Initial cell segmentation config: ", default_config)
+    # Note: The dispatcher capsule creates a single config with
+    # the channels. If the channel key does not exist, it means
+    # there are no segmentation channels splitted
+    if channel_to_process is not None:
 
-    # combine configs
-    smartspim_config = set_up_pipeline_parameters(
-        pipeline_config=pipeline_config, default_config=default_config
-    )
+        # get default configs
+        default_config = get_yaml(
+            os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
+        )
 
-    smartspim_config["name"] = smartspim_dataset_name
+        # add paths to default_config
+        default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
+        print("Files in path: ", os.listdir(default_config["input_data"]))
 
-    print("Final cell segmentation config: ", smartspim_config)
+        default_config["save_path"] = f"{results_folder}/cell_{channel_to_process}"
+        default_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
 
-    segmentation.main(
-        intermediate_segmented_folder=Path(scratch_folder),
-        smartspim_config=smartspim_config,
-    )
+        print("Initial cell segmentation config: ", default_config)
+
+        # combine configs
+        smartspim_config = set_up_pipeline_parameters(
+            pipeline_config=pipeline_config, default_config=default_config
+        )
+
+        smartspim_config["name"] = smartspim_dataset_name
+
+        print("Final cell segmentation config: ", smartspim_config)
+
+        segmentation.main(
+            intermediate_segmented_folder=Path(scratch_folder),
+            smartspim_config=smartspim_config,
+        )
 
 
 if __name__ == "__main__":

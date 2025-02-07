@@ -195,6 +195,9 @@ def run():
             smartspim_config=smartspim_config,
         )
 
+    else:
+        print(f"No segmentation channel, pipeline config: {pipeline_config}")
+
 
 if __name__ == "__main__":
     run()

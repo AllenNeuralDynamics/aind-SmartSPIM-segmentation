@@ -202,18 +202,5 @@ def run():
             dictionary=pipeline_config,
         )
 
-        # For post-processing pipeline
-        post_process_seg = data_folder.joinpath('image_cell_segmentation')
-
-        if post_process_seg.exists():
-            output_path = results_folder / post_process_seg.stem
-            print("Post-processing pipeline and copying: ", post_process_seg)
-            print("Folder in the segmentation: ", list(post_process_seg.glob("*")))
-            shutil.copy(
-                str(post_process_seg),
-                output_path
-            )
-
-
 if __name__ == "__main__":
     run()

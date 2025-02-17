@@ -206,11 +206,15 @@ def run():
         post_process_seg = data_folder.joinpath('image_cell_segmentation')
 
         if post_process_seg.exists():
-            for cell_folders in post_process_seg.glob("cell*"):
+            for cell_folder in post_process_seg.glob("cell*"):
+                # Proposals added after version 3.0.1
+                cell_folder_name = cell_folder.stem
+                if cell_folder.joinpath('proposals').exists():
+                    cell_folder = cell_folder.joinpath('proposals')
 
-                output_path = results_folder / cell_folders.stem
+                output_path = results_folder / cell_folder_name
                 shutil.copy(
-                    str(cell_folders),
+                    str(cell_folder),
                     output_path
                 )
 

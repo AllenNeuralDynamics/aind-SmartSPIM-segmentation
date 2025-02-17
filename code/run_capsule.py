@@ -12,7 +12,7 @@ from typing import List, Tuple
 from aind_smartspim_segmentation import segmentation
 from aind_smartspim_segmentation.params import get_yaml
 from aind_smartspim_segmentation.utils import utils
-
+import shutil
 
 def get_data_config(
     data_folder: str,
@@ -201,6 +201,18 @@ def run():
             filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
             dictionary=pipeline_config,
         )
+
+        # For post-processing pipeline
+        post_process_seg = data_folder.joinpath('image_cell_segmentation')
+
+        if post_process_seg.exists():
+            output_path = results_folder / post_process_seg.stem
+            print(f"Post-processing pipeline and copying: {post_process_seg}")
+            print(f"Folder in the segmentation: {list(post_process_seg.glob("*"))}")
+            shutil.copy(
+                str(post_process_seg),
+                output_path
+            )
 
 
 if __name__ == "__main__":

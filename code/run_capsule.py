@@ -203,7 +203,7 @@ def run():
         )
 
         # For post-processing pipeline
-        post_process_seg = data_folder.joinpath('image_cell_segmentation')
+        post_process_seg = Path(data_folder).joinpath('image_cell_segmentation')
 
         if post_process_seg.exists():
             for cell_folder in post_process_seg.glob("cell*"):

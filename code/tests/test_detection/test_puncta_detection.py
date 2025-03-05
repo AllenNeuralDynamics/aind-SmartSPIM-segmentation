@@ -3,8 +3,10 @@ Tests the traditional detection
 """
 
 import unittest
-from aind_smartspim_segmentation.traditional_detection import puncta_detection
+
 import numpy as np
+from aind_smartspim_segmentation.traditional_detection import puncta_detection
+
 
 class PunctaDetection(unittest.TestCase):
     """Class for testing the puncta detection"""
@@ -13,14 +15,16 @@ class PunctaDetection(unittest.TestCase):
         """
         Tests prunning blobs
         """
-    
-        blobs_array = np.array([
-            [10, 10, 10],
-            [12, 15, 156],
-            [6, 16, 8],
-            [9, 13, 10],
-            [145, 250, 356],
-        ])
+
+        blobs_array = np.array(
+            [
+                [10, 10, 10],
+                [12, 15, 156],
+                [6, 16, 8],
+                [9, 13, 10],
+                [145, 250, 356],
+            ]
+        )
 
         expected_result = np.array(
             [10, 10, 10],

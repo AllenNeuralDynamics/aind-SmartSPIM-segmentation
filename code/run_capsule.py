@@ -10,10 +10,10 @@ from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
+import pandas as pd
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.utils import utils
 from ng_link import NgState
-from ng_link.ng_state import get_points_from_xml
 
 
 def generate_neuroglancer_link(
@@ -55,7 +55,9 @@ def generate_neuroglancer_link(
     """
 
     logger.info(f"Reading cells from {detected_cells_path}")
-    cells = get_points_from_xml(detected_cells_path)
+
+    cells = pd.read_csv(detected_cells_path)[["Z", "Y", "X"]]
+    cells = cells.rename(columns={"X": "x", "Y": "y", "Z": "z"}).to_dict(orient="records")
 
     output_precomputed = os.path.join(output, "visualization/precomputed")
     json_name = os.path.join(output, "visualization/neuroglancer_config.json")
@@ -222,72 +224,89 @@ def run():
         results_folder=RESULTS_FOLDER,
     )
 
-    input_channel = f"{pipeline_config['pipeline_processing']['segmentation']['channel']}.zarr"
+    segmentation_info = pipeline_config.get("segmentation")
 
-    DATA_PATH = f"{DATA_FOLDER}/{input_channel}"
-    SEGMENTATION_PATH = None
+    if segmentation_info is None:
+        raise ValueError("Please, provide segmentation channels.")
 
-    # Output folder
-    output_folder = RESULTS_FOLDER.joinpath(
-        f"cell_{pipeline_config['pipeline_processing']['segmentation']['channel']}"
-    )
-    metadata_path = output_folder.joinpath("metadata")
+    channel_to_process = segmentation_info.get("channel")
 
-    utils.create_folder(dest_dir=str(metadata_path), verbose=True)
+    # Note: The dispatcher capsule creates a single config with
+    # the channels. If the channel key does not exist, it means
+    # there are no segmentation channels splitted
+    if channel_to_process is not None:
 
-    logger = utils.create_logger(output_log_path=str(metadata_path))
+        DATA_PATH = f"{DATA_FOLDER}/{channel_to_process}.zarr"
+        SEGMENTATION_PATH = None
 
-    # Puncta detection parameters
+        # Output folder
+        output_folder = RESULTS_FOLDER.joinpath(
+            f"cell_{pipeline_config['pipeline_processing']['segmentation']['channel']}"
+        )
+        metadata_path = output_folder.joinpath("metadata")
 
-    sigma_zyx = [1.8, 1.0, 1.0]
-    background_percentage = 25
-    axis_pad = int(1.6 * max(max(sigma_zyx[1:]), sigma_zyx[0]) * 5)
-    min_zyx = [3, 3, 3]
-    filt_thresh = 20
-    raw_thresh = 180
-    context_radius = 3
-    radius_confidence = 0.05
+        utils.create_folder(dest_dir=str(metadata_path), verbose=True)
 
-    # Data loader params
-    puncta_params = {
-        "dataset_path": DATA_PATH,
-        "segmentation_mask_path": SEGMENTATION_PATH,
-        "multiscale": "1",
-        "prediction_chunksize": (128, 128, 128),
-        "target_size_mb": 3048,
-        "n_workers": 0,
-        "batch_size": 1,
-        "axis_pad": axis_pad,
-        "output_folder": output_folder,
-        "metadata_path": metadata_path,
-        "logger": logger,
-        "super_chunksize": None,
-        "spot_parameters": {
-            "sigma_zyx": sigma_zyx,
-            "background_percentage": background_percentage,
-            "min_zyx": min_zyx,
-            "filt_thresh": filt_thresh,
-            "raw_thresh": raw_thresh,
-            "context_radius": context_radius,
-            "radius_confidence": radius_confidence,
-        },
-    }
+        logger = utils.create_logger(output_log_path=str(metadata_path))
 
-    logger.info(
-        f"Dataset path: {puncta_params['dataset_path']} - Cell detection params: {puncta_params}"
-    )
+        # Puncta detection parameters
+        sigma_zyx = [1.8, 1.0, 1.0]
+        background_percentage = 25
+        axis_pad = int(1.6 * max(max(sigma_zyx[1:]), sigma_zyx[0]) * 5)
+        min_zyx = [3, 3, 3]
+        filt_thresh = 20
+        raw_thresh = 180
+        context_radius = 3
+        radius_confidence = 0.05
 
-    smartspim_cell_detection(**puncta_params)
+        # Data loader params
+        puncta_params = {
+            "dataset_path": DATA_PATH,
+            "segmentation_mask_path": SEGMENTATION_PATH,
+            "multiscale": "1",
+            "prediction_chunksize": (128, 128, 128),
+            "target_size_mb": 3048,
+            "n_workers": 0,
+            "batch_size": 1,
+            "axis_pad": axis_pad,
+            "output_folder": output_folder,
+            "metadata_path": metadata_path,
+            "logger": logger,
+            "super_chunksize": None,
+            "spot_parameters": {
+                "sigma_zyx": sigma_zyx,
+                "background_percentage": background_percentage,
+                "min_zyx": min_zyx,
+                "filt_thresh": filt_thresh,
+                "raw_thresh": raw_thresh,
+                "context_radius": context_radius,
+                "radius_confidence": radius_confidence,
+            },
+        }
 
-    # generate_neuroglancer_link(
-    #     image_path,
-    #     smartspim_config["name"],
-    #     smartspim_config["channel"],
-    #     detected_cells_path,
-    #     smartspim_config["save_path"],
-    #     smartspim_config["cellfinder_params"]["voxel_sizes"],
-    #     logger,
-    # )
+        logger.info(
+            f"Dataset path: {puncta_params['dataset_path']} - Cell detection params: {puncta_params}"
+        )
+
+        detected_cells_path = smartspim_cell_detection(**puncta_params)
+
+        if detected_cells_path is not None:
+            generate_neuroglancer_link(
+                image_path=DATA_PATH,
+                dataset_name=smartspim_dataset_name,
+                channel_name=channel_to_process,
+                detected_cells_path=detected_cells_path,
+                output=output_folder,
+                voxel_sizes=[2.0, 1.8, 1.8],
+                logger=logger,
+            )
+
+    else:
+        print(f"No segmentation channel, pipeline config: {pipeline_config}")
+        utils.save_dict_as_json(
+            filename=f"{RESULTS_FOLDER}/segmentation_processing_manifest_empty.json",
+            dictionary=pipeline_config,
+        )
 
 
 if __name__ == "__main__":

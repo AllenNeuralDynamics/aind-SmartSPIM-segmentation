@@ -28,7 +28,7 @@ from neuroglancer import CoordinateSpace
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
-from .__init__ import __pipeline_version__, __version__
+from .__init__ import __maintainers__, __pipeline_version__, __version__
 from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
@@ -331,7 +331,7 @@ def smartspim_cell_detection(
     logger: logging.Logger,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     segmentation_mask_path: Optional[PathLike] = None,
-):
+) -> str:
     """
     Chunked puncta detection
 
@@ -374,6 +374,11 @@ def smartspim_cell_detection(
         Path where the segmentation mask is stored. It could
         be a local path or in a S3 path.
         Default None
+
+    Returns
+    -------
+    str
+        Path where the CSV with the idenfied proposals is stored.
     """
     co_cpus = int(utils.get_code_ocean_cpu_limit())
     data_processes = []
@@ -515,6 +520,8 @@ def smartspim_cell_detection(
     # Variables for multiprocessing
     picked_blocks = []
     curr_picked_blocks = 0
+
+    output_csv = None
 
     logger.info(f"Number of workers processing data: {exec_n_workers}")
     with cupy.cuda.Device(device=device):
@@ -671,7 +678,7 @@ def smartspim_cell_detection(
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
         # Saving spots as numpy and csv
-        np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
+        # np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
 
         columns = ["Z", "Y", "X", "Z_center", "Y_center", "X_center", "dist", "r"]
         sort_column = "Z"
@@ -688,9 +695,10 @@ def smartspim_cell_detection(
         spots_df[int_columns] = spots_df[int_columns].astype("int")
         spots_df = spots_df.sort_values(by=sort_column)
 
+        output_csv = f"{output_folder}/cell_likelihoods.csv"
         # Saving spots
         spots_df.to_csv(
-            f"{output_folder}/spots.csv",
+            output_csv,
             index=False,
         )
 
@@ -725,7 +733,7 @@ def smartspim_cell_detection(
         utils.generate_processing(
             data_processes=data_processes,
             dest_processing=str(metadata_path),
-            processor_full_name="Camilo Laiton",
+            processor_full_name=__maintainers__[0],
             pipeline_version=__pipeline_version__,
         )
 
@@ -738,5 +746,7 @@ def smartspim_cell_detection(
             cpu_percentages,
             memory_usages,
             metadata_path,
-            "smartspim_cell_detection",
+            "smartspim_cell_proposals",
         )
+
+    return output_csv

@@ -1,1 +1,1 @@
-""" Testing library """
+"""Testing library"""

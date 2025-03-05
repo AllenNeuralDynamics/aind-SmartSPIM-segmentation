@@ -1,1 +1,1 @@
-""" Tests the traditional detection functions """
+"""Tests the traditional detection functions"""

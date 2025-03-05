@@ -3,7 +3,7 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aind_smartspim_cell_proposals"
+name = "aind_smartspim_segmentation"
 description = "Identifies cell proposals from SmartSPIM datasets."
 license = {text = "MIT"}
 requires-python = ">=3.9"
@@ -43,7 +43,7 @@ dev = [
 where = ["code"]
 
 [tool.setuptools.dynamic]
-version = {attr = "aind_smartspim_cell_proposals.__version__"}
+version = {attr = "aind_smartspim_segmentation.__version__"}
 
 [tool.black]
 line-length = 101
@@ -68,7 +68,7 @@ exclude = '''
 
 [tool.coverage.run]
 omit = ["*__init__*"]
-source = ["aind_smartspim_cell_proposals", "tests"]
+source = ["aind_smartspim_segmentation", "tests"]
 
 [tool.coverage.report]
 exclude_lines = ["if __name__ == .__main__.:"]

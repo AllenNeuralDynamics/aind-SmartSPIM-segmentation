@@ -3,7 +3,7 @@ Tests the traditional detection
 """
 
 import unittest
-from aind_smartspim_cell_proposals.traditional_detection import puncta_detection
+from aind_smartspim_segmentation.traditional_detection import puncta_detection
 import numpy as np
 
 class PunctaDetection(unittest.TestCase):

@@ -50,7 +50,7 @@ cell_Ex_XXX_Em_XXX/
 ## Features
 
 - **High-throughput** processing of whole-brain images
-- **Cloud-compatible** with **Dask** and **CellFinder**
+- **Cloud-compatible** with S3 storage
 - **Neuroglancer integration** for visualization
 
 ## Installation

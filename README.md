@@ -1,6 +1,42 @@
 # aind-smartspim-segmentation
 
-This version is compatible with the pipeline feature in Code Ocean.
+Large-scale detection of cell-like structures. The algorithms included in this package are:
+
+**Traditional algorithm**: Method based on the Laplacian of Gaussians technique. These are the image processing steps that happen in every chunk:
+1. Laplacian of Gaussians to enhance regions where the intensity changes dramatically (higher gradient).
+2. Percentile to get estimated background image.
+3. Combination of logical ANDs to filter the LoG image using threshold values and non-linear maximum filter.
+4. After identifying initial spots (ZYX points) from 1-3 steps, we prune blobs close to each other within a certain radius $$r$$ using a kd-tree.
+5. We take each of these pruned spots and get their contexts which is a 3D image of size $$context = (radius + 1, radius + 1, radius + 1)$$.
+6. Finally, we fit a gaussian to each of the spots using its context to be able to prune false positives.
+
+This is a traditional-based algorithm, therefore, parameter tunning is required to make it work.
+
+The output of this algorithm is a CSV file with the following columns:
+
+- Z: Z location of the spot.
+- Y: Y location of the spot.
+- X: X location of the spot.
+- Z_center: Z center of the spot during the guassian fitting, useful for demixing.
+- Y_center: Y center of the spot during the guassian fitting, useful for demixing.
+- X_center: X center of the spot during the guassian fitting, useful for demixing.
+- dist: Euclidean distance or L2 norm of the ZYX center vector, $`norm = \sqrt{z^2 + y^2 + x^2}`$.
+- r: Pearson correlation coefficient between integrated 3D gaussian and the 3D context where the spot is located.
+- fg: Mean foreground of the proposal.
+- bg: Mean background of the proposal.
+
+The output folder structure looks like:
+
+cell_Ex_XXX_Em_XXX/
+    metadata/
+        processing.json
+        proposals.log
+    visualization/
+        precomputed
+        neuroglancer_config.json
+    cell_likelihoods.csv
+    
+The metadata folder includes aind-data-schema metadata useful to track image processing parameters. The log registers every step the algorithm took to get the final result. In the visualization folder you will find the assets useful to visualize the results in neuroglancer. Finally, the cell_likelihoods.csv contains the identified proposals as well as metrics useful to represent them.
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)

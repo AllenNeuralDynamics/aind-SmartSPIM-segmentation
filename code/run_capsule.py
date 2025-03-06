@@ -96,7 +96,7 @@ def generate_neuroglancer_link(
         base_url=neuroglancer_domain,
         mount_service="s3",
         bucket_path=bucket_path,
-        output_json=os.path.join(output, "visualization"),
+        output_dir=os.path.join(output, "visualization"),
         json_name=json_name,
     )
 
@@ -240,9 +240,7 @@ def run():
         SEGMENTATION_PATH = None
 
         # Output folder
-        output_folder = RESULTS_FOLDER.joinpath(
-            f"cell_{pipeline_config['pipeline_processing']['segmentation']['channel']}"
-        )
+        output_folder = RESULTS_FOLDER.joinpath(f"cell_{channel_to_process}")
         metadata_path = output_folder.joinpath("metadata")
 
         utils.create_folder(dest_dir=str(metadata_path), verbose=True)
@@ -288,7 +286,7 @@ def run():
             f"Dataset path: {puncta_params['dataset_path']} - Cell detection params: {puncta_params}"
         )
 
-        detected_cells_path = smartspim_cell_detection(**puncta_params)
+        detected_cells_path, voxel_size_ZYX = smartspim_cell_detection(**puncta_params)
 
         if detected_cells_path is not None:
             generate_neuroglancer_link(
@@ -297,7 +295,7 @@ def run():
                 channel_name=channel_to_process,
                 detected_cells_path=detected_cells_path,
                 output=output_folder,
-                voxel_sizes=[2.0, 1.8, 1.8],
+                voxel_sizes=voxel_size_ZYX,
                 logger=logger,
             )
 

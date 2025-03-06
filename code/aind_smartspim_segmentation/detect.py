@@ -377,8 +377,9 @@ def smartspim_cell_detection(
 
     Returns
     -------
-    str
+    str, List[float]
         Path where the CSV with the idenfied proposals is stored.
+        List with the voxel size in ZYX order
     """
     co_cpus = int(utils.get_code_ocean_cpu_limit())
     data_processes = []
@@ -459,6 +460,12 @@ def smartspim_cell_detection(
     logger.info(f"Full image metadata: {image_metadata}")
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
+
+    voxel_size = [
+        image_metadata["axes"]["z"]["scale"],
+        image_metadata["axes"]["y"]["scale"],
+        image_metadata["axes"]["x"]["scale"],
+    ]
 
     logger.info(f"Filtered Image metadata: {image_metadata}")
     end_date_time = time()
@@ -657,6 +664,7 @@ def smartspim_cell_detection(
         )
         logger.info(message)
 
+        """
         # TODO add chunked precomputed format for points with multiscales
         coord_space = CoordinateSpace(
             names=["z", "y", "x"],
@@ -674,13 +682,14 @@ def smartspim_cell_detection(
             path=f"{output_folder}/precomputed",
             res=coord_space,
         )
+        """
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
         # Saving spots as numpy and csv
         # np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
 
-        columns = ["Z", "Y", "X", "Z_center", "Y_center", "X_center", "dist", "r"]
+        columns = ["Z", "Y", "X", "Z_center", "Y_center", "X_center", "dist", "r", "fg", "bg"]
         sort_column = "Z"
         int_columns = ["Z", "Y", "X"]
 
@@ -749,4 +758,4 @@ def smartspim_cell_detection(
             "smartspim_cell_proposals",
         )
 
-    return output_csv
+    return output_csv, voxel_size

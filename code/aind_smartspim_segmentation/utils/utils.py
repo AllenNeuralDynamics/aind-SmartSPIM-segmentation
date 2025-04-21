@@ -162,7 +162,7 @@ def delay_detect(
     main script.
     """
     cells = detect.main(
-        signal_array=np.asarray(img),
+        signal_array=np.asarray(img).astype('uint16'),
         save_path=save_path,
         block=count,
         offset=offset,

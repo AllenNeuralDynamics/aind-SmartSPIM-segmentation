@@ -5,13 +5,16 @@ in code ocean
 
 import os
 import shutil
+import logging
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-from aind_smartspim_segmentation import segmentation
+
+from aind_smartspim_segmentation.detect import smartspim_cell_detection
 from aind_smartspim_segmentation.params import get_yaml
 from aind_smartspim_segmentation.utils import utils
+from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
 import shutil
 
 def get_data_config(
@@ -140,7 +143,7 @@ def run():
     # Absolute paths of common Code Ocean folders
     data_folder = os.path.abspath("../data")
     results_folder = os.path.abspath("../results")
-    scratch_folder = os.path.abspath("../scratch")
+    #scratch_folder = os.path.abspath("../scratch")
 
     # It is assumed that these files
     # will be in the data folder
@@ -169,17 +172,25 @@ def run():
 
         # get default configs
         default_config = get_yaml(
-            os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
+            os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
+        )
+        default_config['axis_pad'] = int(
+            1.6 * max(
+                max(default_config['spot_parameters']['sigma_zyx'][1:]),
+                default_config['spot_parameters']['sigma_zyx'][0]
+            ) * 5
         )
 
         # add paths to default_config
-        default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
+        default_config["dataset_path"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
         print("Files in path: ", os.listdir(default_config["input_data"]))
 
-        default_config["save_path"] = f"{results_folder}/cell_{channel_to_process}"
+        default_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
         default_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
+        
+        utils.create_folder(dest_dir=str(default_config["metadata_path"]), verbose=True)
 
-        print("Initial cell segmentation config: ", default_config)
+        #print("Initial cell segmentation config: ", default_config)
 
         # combine configs
         smartspim_config = set_up_pipeline_parameters(
@@ -189,12 +200,49 @@ def run():
         smartspim_config["name"] = smartspim_dataset_name
 
         print("Final cell segmentation config: ", smartspim_config)
+        #print("Final cell segmentation config: ", default_config)
 
-        segmentation.main(
-            intermediate_segmented_folder=Path(scratch_folder),
-            smartspim_config=smartspim_config,
-        )
-
+        #segmentation.main(
+        #    intermediate_segmented_folder=Path(scratch_folder),
+        #    smartspim_config=smartspim_config,
+        #)
+        
+        logger = utils.create_logger(output_log_path=str(default_config["metadata_path"]))
+        smartspim_config['logger'] = logger
+        
+        # run detection
+        detected_cells_path, voxel_size_ZYX = smartspim_cell_detection(**default_config)
+        
+        # create nueroglancer link
+        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+        res = {}
+        for axis in pipeline_config['stitching']['resolution']:
+            res[axis['axis_name']] = axis['resolution']
+    
+        ng_config = {
+            "base_url": "https://neuroglancer-demo.appspot.com/#!",
+            "crossSectionScale": 15,
+            "projectionScale": 16384,
+            "orientation": acquisition,
+            "dimensions" : {
+                "z": [res['Z'] * 10**-6, 'm' ],
+                "y": [res['Y'] * 10**-6, 'm' ],
+                "x": [res['X'] * 10**-6, 'm' ],
+                "t": [0.001, 's'],
+            },
+            "rank": 3,
+            "gpuMemoryLimit": 1500000000,
+        }
+        
+        #if detected_cells_path is not None:
+        #    ng_utils.generate_neuroglancer_link(
+        #        cells_df,
+        #        ng_config,
+        #        default_config,
+        #        dynamic_range,
+        #        logger
+        #    )
+        
     else:
         print(f"No segmentation channel, pipeline config: {pipeline_config}")
         utils.save_dict_as_json(

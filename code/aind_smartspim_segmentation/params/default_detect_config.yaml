@@ -1,0 +1,24 @@
+# Default parameters for spot detection
+multiscale: 0
+prediction_chuncksize:
+  - 128
+  - 128
+  - 128
+target_size_mb: 3048
+n_workers: 0
+batch_size: 1
+super_chunksize: None
+spot_parameters:
+  sigma_zyx:
+    - 2.0
+    - 1.8
+    - 1.8
+  background_percentage: 25 
+  min_zyx:
+    - 3
+    - 3
+    - 3
+  filt_thresh: -1
+  raw_thresh: -1
+  context_radius: 7
+  radius_confidence: 0.5

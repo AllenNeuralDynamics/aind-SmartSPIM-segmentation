@@ -1,6 +1,5 @@
 """
-Tim's Wang puncta detection algorithm.
-Modified by: Camilo Laiton
+Traditional puncta detection algorithm.
 """
 
 import logging

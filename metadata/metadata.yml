@@ -1,6 +1,7 @@
 metadata_version: 1
-name: aind-smartspim-cell-proposals
-description: A tool for automated identification of cell proposals in a whole brain.
+name: aind-smartspim-cell-segmentation-1.0.0
+description: A tool for automated segmentation of Cells or Nuclei from wholebrain
+  lightsheet image volumes
 tags:
 - SmartSPIM
 authors:

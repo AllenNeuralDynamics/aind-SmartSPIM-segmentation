@@ -1,21 +1,19 @@
-"""
-Module init file
-"""
+"""Init file for cell segmentation"""
 
-__version__ = "0.0.8"
-__authors__ = ["Camilo Laiton", "Nicholas Lusk"]
-__author_emails__ = ["camilo.laiton@alleninstitute.org", "nicholas.lusk@alleninstitute.org"]
+__version__ = "1.0.0"
+__authors__ = ["Nicholas Lusk", "Camilo Laiton"]
+__author_emails__ = [
+    "nicholas.lusk@alleninstitute.org",
+    "camilo.laiton@alleninstitute.org",
+]
 __license__ = "MIT"
-__description__ = (
-    "This version uses the spot detection algorithm from "
-    "https://github.com/AllenNeuralDynamics/aind-z1-spot-detection "
-    "to identify cell proposals in a zarr dataset. It uses only the "
-    "signal from the labelling channel."
-)
+__description__ = "This version detects cell proposals using cellfinder's algorithm "
 __url__ = "https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation"
-
-__maintainers__ = ["Camilo Laiton", "Nicholas Lusk"]
-__maintainer_emails__ = ["camilo.laiton@alleninstitute.org", "nicholas.lusk@alleninstitute.org"]
-__title__ = "aind-smartspim-cell-proposals"
-__status__ = "Development"  # 'Production', 'Beta'
+__maintainers__ = ["Nicholas Lusk", "Camilo Laiton"]
+__maintainer_emails__ = [
+    "nicholas.lusk@alleninstitute.org",
+    "camilo.laiton@alleninstitute.org",
+]
+__title__ = "aind-SmartSPIM-segmentation"
+__status__ = "Production"  # 'Production', 'Beta'
 __pipeline_version__ = "3.0.1"

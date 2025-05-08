@@ -69,47 +69,6 @@ def get_data_config(
 
     return derivatives_dict, smartspim_dataset
 
-
-def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
-    """
-    Sets up smartspim stitching parameters that come from the
-    pipeline configuration
-
-    Parameters
-    -----------
-    smartspim_dataset: str
-        String with the smartspim dataset name
-
-    pipeline_config: dict
-        Dictionary that comes with the parameters
-        for the pipeline described in the
-        processing_manifest.json
-
-    default_config: dict
-        Dictionary that has all the default
-        parameters to execute this capsule with
-        smartspim data
-
-    Returns
-    -----------
-    Dict
-        Dictionary with the combined parameters
-    """
-
-    default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
-    default_config["channel"] = pipeline_config["segmentation"]["channel"]
-    default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
-    default_config["chunk_size"] = int(pipeline_config["segmentation"]["chunksize"])
-    default_config["cellfinder_params"]["start_plane"] = int(
-        pipeline_config["segmentation"]["signal_start"]
-    )
-    default_config["cellfinder_params"]["end_plane"] = int(
-        pipeline_config["segmentation"]["signal_end"]
-    )
-
-    return default_config
-
-
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """
     Validates input elemts for a capsule in
@@ -161,14 +120,12 @@ def run():
         data_folder=data_folder, results_folder=results_folder
     )
 
-    #segmentation_info = pipeline_config.get("segmentation")
-    segmentation_info = pipeline_config['pipeline_processing'].get("segmentation")
+    segmentation_info = pipeline_config.get("segmentation")
 
     if segmentation_info is None:
         raise ValueError("Please, provide segmentation channels.")
 
-    #channel_to_process = segmentation_info.get("channel")
-    channel_to_process = segmentation_info.get("channels")[0]
+    channel_to_process = segmentation_info.get("channel")
 
     # Note: The dispatcher capsule creates a single config with
     # the channels. If the channel key does not exist, it means
@@ -176,47 +133,33 @@ def run():
     if channel_to_process is not None:
 
         # get default configs
-        default_config = get_yaml(
+        smartspim_config = get_yaml(
             os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
         )
-        default_config['axis_pad'] = int(
+        smartspim_config['axis_pad'] = int(
             1.6 * max(
                 max(default_config['spot_parameters']['sigma_zyx'][1:]),
                 default_config['spot_parameters']['sigma_zyx'][0]
             ) * 5
         )
 
-        # add paths to default_config
-        #default_config["dataset_path"] = os.path.abspath(
-        #    f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}"
-        #)
+        # add paths to smartspim_config
+        smartspim_config["dataset_path"] = os.path.abspath(
+            f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}"
+        )
 
-        default_config["dataset_path"] = '/data/SmartSPIM_799056_2025-04-29_22-43-05_stitched_2025-05-06_08-09-20/image_tile_fusing/OMEZarr/Ex_488_Em_525.zarr'
+        print("Files in path: ", os.listdir(smartspim_config["dataset_path"]))
 
-        #print("Files in path: ", os.listdir(default_config["dataset_path"]))
-
-        default_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
-        default_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
+        smartspim_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
+        smartspim_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
         
-        utils.create_folder(dest_dir=str(default_config["metadata_path"]), verbose=True)
+        utils.create_folder(dest_dir=str(smartspim_config["metadata_path"]), verbose=True)
 
-        print("Initial cell segmentation config: ", default_config)
+        print("Initial cell detection config: ", smartspim_config)
 
-        # combine configs
-        #smartspim_config = set_up_pipeline_parameters(
-        #    pipeline_config=pipeline_config, default_config=default_config
-        #)
-
-        smartspim_config = default_config
         smartspim_config["name"] = smartspim_dataset_name
 
         print("Final cell segmentation config: ", smartspim_config)
-        #print("Final cell segmentation config: ", default_config)
-
-        #segmentation.main(
-        #    intermediate_segmented_folder=Path(scratch_folder),
-        #    smartspim_config=smartspim_config,
-        #)
         
         logger = utils.create_logger(output_log_path=str(default_config["metadata_path"]))
         smartspim_config['logger'] = logger
@@ -225,8 +168,10 @@ def run():
         proposal_df = smartspim_cell_detection(**default_config)
         
         # create nueroglancer link
-        #acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
-        acquisition = utils.read_json_as_dict(f"/data/SmartSPIM_799056_2025-04-29_22-43-05/acquisition.json")
+        smartspim_config["channel"] = channel_to_process
+        smartspim_config['output_folder'] = default_config['output_folder']
+        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+
         dynamic_range = ng_utils.calculate_dynamic_range(default_config["dataset_path"], 99, 3)
         res = {}
         for axis in pipeline_config['stitching']['resolution']:

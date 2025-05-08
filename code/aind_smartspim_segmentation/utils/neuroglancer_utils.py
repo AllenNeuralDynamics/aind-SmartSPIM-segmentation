@@ -284,19 +284,19 @@ def generate_neuroglancer_link(
     """
 
     output_precomputed = os.path.join(
-        smartspim_config["save_path"], "visualization/detected_precomputed"
+        smartspim_config["output_folder"], "visualization/detected_precomputed"
     )
     utils.create_folder(output_precomputed)
     print(f"Output cells precomputed: {output_precomputed}")
 
-    utils.generate_precomputed_cells(
+    generate_precomputed_cells(
         cells_df, precompute_path=output_precomputed, configs=ng_configs
     )
 
-    ng_path = f"s3://{bucket}/{smartspim_config['name']}/image_cell_segmentation/{smartspim_config['channel']}/visualization/neuroglancer_config.json"
+    ng_path = f"s3://{bucket}/{smartspim_config['name']}/image_cell_segmentation/{smartspim_config['channel']}/proposals/visualization/neuroglancer_config.json"
 
     if isinstance(ng_configs["orientation"], dict):
-        crossSectionOrientation = utils.volume_orientation(ng_configs["orientation"])
+        crossSectionOrientation = volume_orientation(ng_configs["orientation"])
     else:
         crossSectionOrientation = [np.cos(np.pi / 4), 0.0, 0.0, np.cos(np.pi / 4)]
 
@@ -340,7 +340,7 @@ def generate_neuroglancer_link(
 
     logger.info(f"Visualization link: {json_state['ng_link']}")
     output_path = os.path.join(
-        smartspim_config["save_path"], "visualization/neuroglancer_config.json"
+        smartspim_config["output_folder"], "visualization/neuroglancer_config.json"
     )
 
     with open(output_path, "w") as outfile:

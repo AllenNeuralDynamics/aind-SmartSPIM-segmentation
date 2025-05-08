@@ -1,41 +1,79 @@
-FROM tensorflow/tensorflow:2.11.0-gpu
-# --------------------- #
-#      METADATA         #
-# --------------------- #
-LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
-      org.opencontainers.image.title="Image Cell Proposals" \
-      org.opencontainers.image.description="Container for identification of cell proposals" \
-      org.opencontainers.image.version="1.0.0" \
-      org.opencontainers.image.licenses="MIT"
+# Builder stage with full TensorFlow for compatibility
+FROM tensorflow/tensorflow:2.11.0-gpu as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# --------------------- #
-#   SYSTEM DEPENDENCIES #
-# --------------------- #
-RUN apt-get update && apt-get install -y --no-install-recommends wget git && \
-    wget -qO /miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    bash /miniconda.sh -b -p /opt/conda && \
-    rm /miniconda.sh && \
-    apt-get remove --purge -y wget && \
-    apt-get autoremove -y && \
+# Install only essential system dependencies and Python 3.10
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        wget \
+        git \
+        software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3.10-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# --------------------- #
-#     CONDA ENV SETUP   #
-# --------------------- #
-ENV PATH="/opt/conda/bin:$PATH"
-RUN conda create -n cell_proposals python=3.10 --no-default-packages -y && \
-    conda clean --all --yes
+# Create virtual environment with Python 3.10
+RUN python3.10 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-SHELL ["conda", "run", "-n", "cell_proposals", "/bin/bash", "-c"]
+# Install Python dependencies with aggressive cleanup
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        aind-large-scale-prediction==1.0.0 \
+        numpy==1.26.4 \
+        scikit-image==0.22.0 \
+        matplotlib==3.8.2 \
+        scipy==1.15.2 \
+        cupy-cuda11x==13.4.1 \
+        neuroglancer==2.40.1 \
+        aind-data-schema==1.2.0
 
-RUN pip install -U --no-cache-dir \
-    aind-large-scale-prediction==1.0.0 \
-    numpy==1.26.4 \
-    scikit-image==0.22.0 \
-    matplotlib==3.8.2 \
-    scipy==1.15.2 \
-    cupy-cuda11x==13.4.1 \
-    neuroglancer==2.40.1 \
-    aind-data-schema==1.2.0
+# Runtime stage with minimal CUDA
+FROM nvidia/cuda:11.6.2-cudnn8-runtime-ubuntu20.04
+
+LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
+    org.opencontainers.image.title="Image Cell Proposals" \
+    org.opencontainers.image.description="Container for identification of cell proposals" \
+    org.opencontainers.image.version="1.0.0" \
+    org.opencontainers.image.licenses="MIT"
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV TZ=UTC
+
+# Install Python 3.10
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        software-properties-common \
+        ca-certificates \
+        && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-venv \
+        python3.10-distutils \
+        libgomp1 \
+        && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy only the built virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Set environment variables for TensorFlow GPU
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["bash"]

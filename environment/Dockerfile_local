@@ -1,16 +1,41 @@
-FROM continuumio/miniconda3:23.9.0-0
-LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>"
+FROM tensorflow/tensorflow:2.11.0-gpu
+# --------------------- #
+#      METADATA         #
+# --------------------- #
+LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
+      org.opencontainers.image.title="Image Cell Proposals" \
+      org.opencontainers.image.description="Container for identification of cell proposals" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.licenses="MIT"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y git g++
+# --------------------- #
+#   SYSTEM DEPENDENCIES #
+# --------------------- #
+RUN apt-get update && apt-get install -y --no-install-recommends wget git && \
+    wget -qO /miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    bash /miniconda.sh -b -p /opt/conda && \
+    rm /miniconda.sh && \
+    apt-get remove --purge -y wget && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# --------------------- #
+#     CONDA ENV SETUP   #
+# --------------------- #
+ENV PATH="/opt/conda/bin:$PATH"
+RUN conda create -n cell_proposals python=3.10 --no-default-packages -y && \
+    conda clean --all --yes
+
+SHELL ["conda", "run", "-n", "cell_proposals", "/bin/bash", "-c"]
 
 RUN pip install -U --no-cache-dir \
-    git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@py38-compatible \
+    aind-large-scale-prediction==1.0.0 \
     numpy==1.26.4 \
     scikit-image==0.22.0 \
     matplotlib==3.8.2 \
-    scipy==1.10.1 \
-    cupy-cuda11x==13.3.0 \
+    scipy==1.15.2 \
+    cupy-cuda11x==13.4.1 \
     neuroglancer==2.40.1 \
     aind-data-schema==1.2.0

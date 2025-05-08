@@ -20,7 +20,7 @@ import shutil
 def get_data_config(
     data_folder: str,
     results_folder: str,
-    processing_manifest_path: str = "segmentation_processing_manifest*",
+    processing_manifest_path: str = "processing_manifest*", #"segmentation_processing_manifest*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
     """
@@ -52,9 +52,12 @@ def get_data_config(
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
 
-    processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+    #processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+    processing_data = glob(f"/data/SmartSPIM_799056_2025-04-29_22-43-05/SPIM/derivatives/{processing_manifest_path}")[0]
+
     derivatives_dict = utils.read_json_as_dict(processing_data)
-    data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
+    #data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
+    data_description_dict = utils.read_json_as_dict(f"/data/SmartSPIM_799056_2025-04-29_22-43-05_stitched_2025-05-06_08-09-20/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]
 
@@ -158,12 +161,14 @@ def run():
         data_folder=data_folder, results_folder=results_folder
     )
 
-    segmentation_info = pipeline_config.get("segmentation")
+    #segmentation_info = pipeline_config.get("segmentation")
+    segmentation_info = pipeline_config['pipeline_processing'].get("segmentation")
 
     if segmentation_info is None:
         raise ValueError("Please, provide segmentation channels.")
 
-    channel_to_process = segmentation_info.get("channel")
+    #channel_to_process = segmentation_info.get("channel")
+    channel_to_process = segmentation_info.get("channels")[0]
 
     # Note: The dispatcher capsule creates a single config with
     # the channels. If the channel key does not exist, it means
@@ -182,21 +187,27 @@ def run():
         )
 
         # add paths to default_config
-        default_config["dataset_path"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
-        print("Files in path: ", os.listdir(default_config["input_data"]))
+        #default_config["dataset_path"] = os.path.abspath(
+        #    f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}"
+        #)
+
+        default_config["dataset_path"] = '/data/SmartSPIM_799056_2025-04-29_22-43-05_stitched_2025-05-06_08-09-20/image_tile_fusing/OMEZarr/Ex_488_Em_525.zarr'
+
+        #print("Files in path: ", os.listdir(default_config["dataset_path"]))
 
         default_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
         default_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
         
         utils.create_folder(dest_dir=str(default_config["metadata_path"]), verbose=True)
 
-        #print("Initial cell segmentation config: ", default_config)
+        print("Initial cell segmentation config: ", default_config)
 
         # combine configs
-        smartspim_config = set_up_pipeline_parameters(
-            pipeline_config=pipeline_config, default_config=default_config
-        )
+        #smartspim_config = set_up_pipeline_parameters(
+        #    pipeline_config=pipeline_config, default_config=default_config
+        #)
 
+        smartspim_config = default_config
         smartspim_config["name"] = smartspim_dataset_name
 
         print("Final cell segmentation config: ", smartspim_config)
@@ -211,10 +222,12 @@ def run():
         smartspim_config['logger'] = logger
         
         # run detection
-        detected_cells_path, voxel_size_ZYX = smartspim_cell_detection(**default_config)
+        proposal_df = smartspim_cell_detection(**default_config)
         
         # create nueroglancer link
-        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+        #acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+        acquisition = utils.read_json_as_dict(f"/data/SmartSPIM_799056_2025-04-29_22-43-05/acquisition.json")
+        dynamic_range = ng_utils.calculate_dynamic_range(default_config["dataset_path"], 99, 3)
         res = {}
         for axis in pipeline_config['stitching']['resolution']:
             res[axis['axis_name']] = axis['resolution']
@@ -234,14 +247,13 @@ def run():
             "gpuMemoryLimit": 1500000000,
         }
         
-        #if detected_cells_path is not None:
-        #    ng_utils.generate_neuroglancer_link(
-        #        cells_df,
-        #        ng_config,
-        #        default_config,
-        #        dynamic_range,
-        #        logger
-        #    )
+        ng_utils.generate_neuroglancer_link(
+            proposal_df,
+            ng_config,
+            default_config,
+            dynamic_range,
+            logger
+        )
         
     else:
         print(f"No segmentation channel, pipeline config: {pipeline_config}")

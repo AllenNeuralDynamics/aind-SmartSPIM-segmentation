@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 import cupy
 import numpy as np
+import pandas as pd
 import psutil
 import torch
 from aind_data_schema.core.processing import DataProcess, ProcessName
@@ -23,7 +24,6 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
-from neuroglancer import CoordinateSpace
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
@@ -36,8 +36,6 @@ from .traditional_detection.puncta_detection_optimized import (
     traditional_3D_spot_detection,
 )
 from .utils import utils
-from .utils.generate_precomputed_format import generate_precomputed_spots
-
 
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     """
@@ -115,7 +113,6 @@ def remove_points_in_pad_area(points: ArrayLike, unpadded_slices: Tuple[slice]) 
     ]
 
     return unpadded_points
-
 
 def validate_chunk(data):
     # Apply Gaussian smoothing to reduce noise
@@ -451,7 +448,7 @@ def smartspim_cell_detection(
     zarr_data_loader, zarr_dataset = create_data_loader(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
-        prediction_chunksize=prediction_chunksize,
+        prediction_chunksize=tuple(prediction_chunksize),
         overlap_prediction_chunksize=overlap_prediction_chunksize,
         n_workers=n_workers,
         batch_size=batch_size,
@@ -615,27 +612,28 @@ def smartspim_cell_detection(
         )
 
         # TODO add chunked precomputed format for points with multiscales
-        coord_space = CoordinateSpace(
-            names=["z", "y", "x"],
-            units=["um", "um", "um"],
-            scales=[
-                image_metadata["axes"]["z"]["scale"],
-                image_metadata["axes"]["y"]["scale"],
-                image_metadata["axes"]["x"]["scale"],
-            ],
-        )
+        #coord_space = CoordinateSpace(
+        #    names=["z", "y", "x"],
+        #    units=["um", "um", "um"],
+        #    scales=[
+        #        image_metadata["axes"]["z"]["scale"],
+        #        image_metadata["axes"]["y"]["scale"],
+        #        image_metadata["axes"]["x"]["scale"],
+        #    ],
+        #)
 
-        logger.info(f"Neuroglancer coordinate space: {coord_space}")
-        generate_precomputed_spots(
-            spots=spots_global_coordinate_prunned[:, :3],  # Only ZYX locations
-            path=f"{output_folder}/precomputed",
-            res=coord_space,
-        )
+        #logger.info(f"Neuroglancer coordinate space: {coord_space}")
+        #generate_precomputed_spots(
+        #    spots=spots_global_coordinate_prunned[:, :3],  # Only ZYX locations
+        #    path=f"{output_folder}/precomputed",
+        #    res=coord_space,
+        #)
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
         # Saving spots
-        np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
+        proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
+        proposal_df.to_csv(f"{output_folder}/detected_cells.csv")
 
         data_processes.append(
             DataProcess(
@@ -674,3 +672,5 @@ def smartspim_cell_detection(
             metadata_path,
             "smartspim_cell_detection",
         )
+
+    return proposal_df

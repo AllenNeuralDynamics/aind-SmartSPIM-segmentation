@@ -1,0 +1,13 @@
+{
+	"version": 1,
+	"attached_datasets": [
+		{
+			"id": "5bd7db21-9fc1-41a6-b756-0bf644677eb7",
+			"mount": "SmartSPIM_799056_2025-04-29_22-43-05"
+		},
+		{
+			"id": "f4ea3a03-3f27-47c4-906f-2abd181435f6",
+			"mount": "SmartSPIM_799056_2025-04-29_22-43-05_stitched_2025-05-06_08-09-20"
+		}
+	]
+}

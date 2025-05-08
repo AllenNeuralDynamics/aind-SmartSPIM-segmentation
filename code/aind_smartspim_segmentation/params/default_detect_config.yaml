@@ -1,13 +1,13 @@
 # Default parameters for spot detection
-multiscale: 0
-prediction_chuncksize:
+multiscale: "0"
+prediction_chunksize:
   - 128
   - 128
   - 128
 target_size_mb: 3048
 n_workers: 0
 batch_size: 1
-super_chunksize: None
+super_chunksize: null
 spot_parameters:
   sigma_zyx:
     - 2.0

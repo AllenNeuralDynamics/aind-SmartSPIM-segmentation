@@ -20,7 +20,7 @@ import dask.array as da
 
 from multiprocessing.managers import BaseManager, NamespaceProxy
 
-from .utils import utils
+from ..utils import utils
 from .._shared.types import PathLike
 
 def volume_orientation(acquisition_params: dict):

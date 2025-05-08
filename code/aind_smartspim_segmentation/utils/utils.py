@@ -16,163 +16,17 @@ import platform
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 import dask
 import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
-from astropy.stats import SigmaClip
-from cellfinder_core.detect import detect
-from photutils.background import Background2D
 from scipy import ndimage as ndi
 from scipy.signal import argrelmin
 
 from .._shared.types import ArrayLike, PathLike
-from .pymusica import musica
-
-
-@dask.delayed
-def delay_astro(
-    img: ArrayLike,
-    estimator: str = "MedianBackground",
-    box: Tuple[int] = (50, 50),
-    filt: Tuple[int] = (3, 3),
-    sig_clip: int = 3,
-    pad: int = 0,
-    reflect: int = 0,
-    amplify: bool = False,
-    smooth: bool = False,
-):
-    """
-    Preprocessing function to standardize the image stack for training networks. Combines a Laplacian Pyramid
-    for contrast enhancement and statistical background subtraction
-
-    Parameters
-    ----------
-    img : array
-        Dask array of lightsheet data. the first dimension should be the Z plane
-    estimator : str
-        one of the background options provided by https://photutils.readthedocs.io/en/stable/background.html
-    box : tuple, optional
-        dimensions in pixels for each tile for background subtraction. The default is (50, 50).
-    filt : tuple, optional
-        filter size for estimator within each tile. The default is (3, 3).
-    sig_clip : int, optional
-        standard deviation above the mean for masking pixel for background subtraction. The default is 3.
-    pad : int, optional
-        number of pixels of padding applied to image. usually only apllies if running on subsection. The default is 0.
-    smooth : boolean, optional
-        whether to apply 3D gaussian smoothing over array. The default is False.
-
-    Returns
-    -------
-    bkg_sub_array : array
-        dask array with preprocessed images
-
-    """
-
-    if reflect != 0:
-        img = np.pad(img, reflect, mode="reflect")
-
-    if pad != 0:
-        img = np.pad(img, pad, mode="constant", constant_values=0)
-
-    # print(img.shape)
-
-    # get estimator function for background subtraction
-    est = getattr(importlib.import_module("photutils.background"), estimator)
-
-    # set parameters for Laplacian pyramid
-    L = 5
-    params_m = {"M": 1023.0, "a": np.full(L, 11), "p": 0.7}
-    backgrounds = []
-    for depth in range(img.shape[0]):
-        curr_img = img[depth, :, :].copy()
-
-        sigma_clip = SigmaClip(sigma=sig_clip, maxiters=10)
-
-        # check if padding has been added and mask regions accordingly
-        if pad > 0:
-            if depth >= pad or depth < (img.shape[0] - pad):
-                # create boolean mask over padded region
-                mask = np.full(curr_img.shape, True)
-                mask[pad:-pad, pad:-pad] = False
-
-                # calculate Laplacian Pyramid
-                if amplify:
-                    curr_img[pad:-pad, pad:-pad] = musica(curr_img[pad:-pad, pad:-pad], L, params_m)
-
-                # get background statistics
-                bkg = Background2D(
-                    curr_img,
-                    box_size=box,
-                    filter_size=filt,
-                    bkg_estimator=est(),
-                    fill_value=0.0,
-                    sigma_clip=sigma_clip,
-                    coverage_mask=mask,
-                    exclude_percentile=100,
-                )
-
-        else:
-            # calculate Laplacian Pyramid
-            if amplify:
-                curr_img = musica(curr_img, L, params_m)
-
-            # get background statistics
-            bkg = Background2D(
-                curr_img,
-                box_size=box,
-                filter_size=filt,
-                bkg_estimator=est(),
-                fill_value=0.0,
-                sigma_clip=sigma_clip,
-                exclude_percentile=100,
-            )
-
-        # subtract background and clip min to 0
-        curr_img = curr_img - bkg.background
-        curr_img = np.where(curr_img < 0, 0, curr_img)
-
-        img[depth, :, :] = curr_img.astype("uint16")
-        backgrounds.append([bkg.background.mean(), bkg.background.std()])
-        del curr_img, bkg
-
-    # smooth over Z plan with gaussian filter
-    if smooth:
-        img = ndi.gaussian_filter(img, sigma=1.0, mode="constant", cval=0, truncate=2)
-
-    return img
-
-
-@dask.delayed
-def delay_detect(
-    img: ArrayLike,
-    save_path: PathLike,
-    count: int,
-    offset: int,
-    padding: int,
-    process_by,
-    smartspim_config: dict,
-):
-    """
-    Delayed function to run cellfinder
-    main script.
-    """
-    cells = detect.main(
-        signal_array=np.asarray(img).astype('uint16'),
-        save_path=save_path,
-        block=count,
-        offset=offset,
-        padding=padding,
-        process_by=process_by,
-        **smartspim_config,
-    )
-
-    return cells
-
 
 def find_good_blocks(img, counts, chunk, ds=3):
     """
@@ -253,6 +107,51 @@ def find_good_blocks(img, counts, chunk, ds=3):
 
     return block_dict
 
+def parse_zarr_metadata(metadata: Dict, multiscale: Optional[str] = None) -> Dict:
+    """
+    Parses the zarr metadata and retrieves
+    the metadata we need in the correct format.
+
+    Parameters
+    ----------
+    metadata: Dict
+        Metadata dictionary that contains ".zattrs" and
+        ".zarray"
+
+    multiscale: Optional[str]
+        Multiscale we're retieving the metadata for.
+        Default: None
+
+    Returns
+    -------
+    Dict
+        Dictionary with the metadata we need
+    """
+    parsed_metadata = {"axes": {}}
+    zattrs = metadata.get(".zattrs")
+    # zarray = metadata.get('.zarray')
+
+    if zattrs is not None:
+        multiscales = zattrs.get("multiscales")[0]
+        axes = multiscales.get("axes")
+        datasets = multiscales.get("datasets")
+
+        dataset_res = None
+
+        for d in datasets:
+            if d["path"] == multiscale:
+                dataset_res = d["coordinateTransformations"][0]["scale"]
+                break
+
+        for idx in range(len(axes)):
+            ax = axes[idx]
+            parsed_metadata["axes"][ax["name"]] = {
+                "unit": ax.get("unit"),
+                "type": ax.get("type"),
+                "scale": dataset_res[idx],
+            }
+
+    return parsed_metadata
 
 def create_logger(output_log_path: PathLike):
     """

@@ -52,12 +52,10 @@ def get_data_config(
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
 
-    #processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
-    processing_data = glob(f"/data/SmartSPIM_799056_2025-04-29_22-43-05/SPIM/derivatives/{processing_manifest_path}")[0]
+    processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
 
     derivatives_dict = utils.read_json_as_dict(processing_data)
-    #data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
-    data_description_dict = utils.read_json_as_dict(f"/data/SmartSPIM_799056_2025-04-29_22-43-05_stitched_2025-05-06_08-09-20/{data_description_path}")
+    data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
     smartspim_dataset = data_description_dict["name"]
 
@@ -105,7 +103,6 @@ def run():
     # Absolute paths of common Code Ocean folders
     data_folder = os.path.abspath("../data")
     results_folder = os.path.abspath("../results")
-    #scratch_folder = os.path.abspath("../scratch")
 
     # It is assumed that these files
     # will be in the data folder

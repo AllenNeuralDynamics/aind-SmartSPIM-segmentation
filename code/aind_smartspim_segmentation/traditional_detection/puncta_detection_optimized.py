@@ -1,5 +1,6 @@
 """
-Traditional puncta detection algorithm.
+Tim's Wang puncta detection algorithm.
+Modified by: Camilo Laiton
 """
 
 import logging
@@ -11,6 +12,8 @@ import cupy
 import numpy as np
 from cupyx.scipy.ndimage import gaussian_laplace
 from cupyx.scipy.ndimage import maximum_filter as cupy_maximum_filter
+from cupyx.scipy.ndimage import minimum_filter as cupy_minimum_filter
+
 from scipy import spatial
 from scipy.special import erf
 
@@ -93,6 +96,21 @@ def prune_blobs_optimized(blobs_array, distance: int, eps=0) -> cupy.ndarray:
 
     return blobs_array[blobs_array[:, -1] > 0]
 
+def calculate_threshold(block_data):
+    
+    
+    block_mean = cupy.mean(block_data)
+    block_std = cupy.std(block_data)
+    
+    filt_thresh = block_mean + block_std * 2.5
+    
+    #empericallly derived threshold range
+    if filt_thresh < 10:
+        filt_thresh = 10
+    elif filt_thresh > 25:
+        filt_thresh = 25
+        
+    return filt_thresh
 
 def identify_initial_spots(
     data_block: ArrayLike,
@@ -150,12 +168,20 @@ def identify_initial_spots(
     if len(non_zero_indices):
         background_image = cupy.percentile(non_zero_indices, background_percentage)
         data_block = cupy.maximum(background_image, data_block)
+        
+        if raw_thresh < 0:
+            block_min = cupy_minimum_filter(data_block, min_zyx)
+            raw_thresh = cupy.median(data_block - block_min)
 
         # data_block[data_block < background_image] = background_image
         # Taking pad from original data, do not reflect if possible
         # data_block = cupy.pad(data_block, pad_size, mode=pad_mode)
 
         LoG_image = -gaussian_laplace(data_block, sigma_zyx)
+        
+        if filt_thresh < 0:
+            filt_thresh = calculate_threshold(LoG_image)
+        
 
         thresholded_img = cupy.logical_and(  # Logical and door to get truth values
             cupy.logical_and(
@@ -174,6 +200,7 @@ def identify_initial_spots(
         )
 
     return spots, LoG_image
+
 
 def scan(img: ArrayLike, spots: ArrayLike, radius: int) -> Tuple[ArrayLike, ArrayLike]:
     """
@@ -270,43 +297,9 @@ def fit_gaussian(S, fit_sigmas, r):
     else:
         return False
 
+
 def intensity_integrated_gaussian3D(center, sigmas, limit) -> ArrayLike:
-    """
-    Calculates the integrated intensity of a 3D Gaussian distribution over a voxel grid.
-
-    This function computes the volume integral of a 3D Gaussian function by using
-    the error function (erf) to analytically solve the integral over each voxel.
-    The calculation is done independently for each dimension and then combined
-    through multiplication.
-
-    Parameters
-    ----------
-    center : ArrayLike
-        The coordinates (x, y, z) of the Gaussian center. Should be a sequence
-        of 3 floating-point numbers.
-    sigmas : ArrayLike
-        The standard deviations (σx, σy, σz) of the Gaussian in each dimension.
-        Should be a sequence of 3 positive floating-point numbers.
-    limit : int
-        The size of the calculation grid in each dimension.
-
-    Returns
-    -------
-    ArrayLike
-        A 3D array of shape (limit, limit, limit) containing the integrated
-        Gaussian intensities for each voxel.
-
-    Notes
-    -----
-    The function works by:
-    1. Creating integration bounds at ±0.5 around each voxel center
-    2. Computing the error function for these bounds
-    3. Taking the difference to get the integrated intensity
-    4. Multiplying the results from each dimension
-
-    The error function integration accounts for the total probability contained
-    within each voxel boundary.
-    """
+    """"""
     # Create an array of shape (2, len(sigmas), limit) with values -0.5 and 0.5
     d_values = np.array([[-0.5, 0.5]], dtype=np.float32).reshape(2, 1, 1)
 
@@ -327,6 +320,7 @@ def intensity_integrated_gaussian3D(center, sigmas, limit) -> ArrayLike:
     diff = np.abs(res_erf[0] - res_erf[1])
     # Compute the product along the first axis
     return np.prod(np.meshgrid(*diff), axis=0)
+
 
 def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[List, ArrayLike]]:
     """
@@ -368,6 +362,7 @@ def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[L
             y_min:y_max,  # noqa: E203
             x_min:x_max,  # noqa: E203
         ]
+
 
 def estimate_background_foreground(
     buffer_context: ArrayLike,

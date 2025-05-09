@@ -37,8 +37,6 @@ from .traditional_detection.puncta_detection import (
     traditional_3D_spot_detection,
 )
 from .utils import utils
-from .utils.generate_precomputed_format import generate_precomputed_spots
-
 
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     """
@@ -319,6 +317,7 @@ def _execute_worker(params: Dict):
 
 def smartspim_cell_detection(
     dataset_path: PathLike,
+    name: str,
     multiscale: str,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
@@ -340,7 +339,10 @@ def smartspim_cell_detection(
     dataset_path: PathLike
         Path where the zarr dataset is stored. It could
         be a local path or in a S3 path.
-
+        
+    name: str
+        name of the dataset formated as SmartSPIM_***_stitched_***
+    
     multiscale: str
         Multiscale to process
 
@@ -489,7 +491,7 @@ def smartspim_cell_detection(
     zarr_data_loader, zarr_dataset = create_data_loader(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
-        prediction_chunksize=prediction_chunksize,
+        prediction_chunksize=tuple(prediction_chunksize),
         overlap_prediction_chunksize=overlap_prediction_chunksize,
         n_workers=n_workers,
         batch_size=batch_size,
@@ -664,25 +666,6 @@ def smartspim_cell_detection(
         )
         logger.info(message)
 
-        """
-        # TODO add chunked precomputed format for points with multiscales
-        coord_space = CoordinateSpace(
-            names=["z", "y", "x"],
-            units=["um", "um", "um"],
-            scales=[
-                image_metadata["axes"]["z"]["scale"],
-                image_metadata["axes"]["y"]["scale"],
-                image_metadata["axes"]["x"]["scale"],
-            ],
-        )
-
-        logger.info(f"Neuroglancer coordinate space: {coord_space}")
-        generate_precomputed_spots(
-            spots=spots_global_coordinate_prunned[:, :3],  # Only ZYX locations
-            path=f"{output_folder}/precomputed",
-            res=coord_space,
-        )
-        """
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
@@ -710,6 +693,10 @@ def smartspim_cell_detection(
             output_csv,
             index=False,
         )
+
+        # Saving spots
+        #proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
+        #proposal_df.to_csv(f"{output_folder}/detected_cells.csv")
 
         data_processes.append(
             DataProcess(
@@ -759,3 +746,5 @@ def smartspim_cell_detection(
         )
 
     return output_csv, voxel_size
+
+

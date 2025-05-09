@@ -14,6 +14,114 @@ from typing import Dict, List, Optional
 import matplotlib.pyplot as plt
 import psutil
 from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
+from scipy import ndimage as ndi
+from scipy.signal import argrelmin
+
+from .._shared.types import ArrayLike, PathLike
+
+def find_good_blocks(img, counts, chunk, ds=3):
+    """
+    Function to Identify good blocks to process
+    using downsampled zarr
+
+    Parameters
+    ----------
+    img : da.array
+        dask array of low resolution image
+    counts : list[int]
+        chunks per dimension of level 0 array.
+    chunk : int
+        chunk size used for cell detection
+    ds : int
+        the factor by which the array is downsampled
+
+    Returns
+    -------
+    block_dict : dict
+        dictionary with information on which blocks to
+        process. key = block number and value = bool
+
+    """
+    if isinstance(img, dask.array.core.Array):
+        img = np.asarray(img)
+
+    img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
+    count, bin_count = np.histogram(img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True)
+
+    try:
+        thresh = argrelmin(count, order=10)[0][0]
+    except IndexError:
+        thresh = 100
+
+    img_binary = np.where(img >= thresh, 1, 0)
+
+    cz = int(chunk / 2**ds)
+    dims = list(img_binary.shape)
+
+    b = 0
+    block_dict = {}
+
+    """ there are rare occasions where the level 0 and
+    level 3 array disagree on chuncks so have some
+    catches to account for that """
+    for z in range(counts[0]):
+        z_l, z_u = z * cz, (z + 1) * cz
+        if z_l > dims[0] - 1:
+            z_l = dims[0] - 2
+        if z_u > dims[0] - 1:
+            z_u = dims[0] - 1
+        for y in range(counts[1]):
+            y_l, y_u = y * cz, (y + 1) * cz
+            if y_l > dims[1] - 1:
+                y_l = dims[1] - 2
+            if y_u > dims[1] - 1:
+                y_u = dims[1] - 1
+            for x in range(counts[2]):
+                x_l, x_u = x * cz, (x + 1) * cz
+                if x_l > dims[2] - 1:
+                    x_l = dims[2] - 2
+                if x_u > dims[2] - 1:
+                    x_u = dims[2] - 1
+
+                block = img_binary[
+                    z_l:z_u,
+                    y_l:y_u,
+                    x_l:x_u,
+                ]
+
+                if np.sum(block) > 0:
+                    block_dict[b] = True
+                else:
+                    block_dict[b] = False
+
+                b += 1
+
+    return block_dict
+
+def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
+    """
+    Create new folders.
+    Parameters
+    ------------------------
+    dest_dir: PathLike
+        Path where the folder will be created if it does not exist.
+    verbose: Optional[bool]
+        If we want to show information about the folder status. Default False.
+    Raises
+    ------------------------
+    OSError:
+        if the folder exists.
+    """
+
+    if not (os.path.exists(dest_dir)):
+        try:
+            if verbose:
+                print(f"Creating new directory: {dest_dir}")
+            os.makedirs(dest_dir)
+        except OSError as e:
+            if e.errno != os.errno.EEXIST:
+                raise
+
 
 
 def profile_resources(

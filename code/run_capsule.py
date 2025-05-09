@@ -145,7 +145,7 @@ def run():
 
         # add paths to smartspim_config
         smartspim_config["dataset_path"] = os.path.abspath(
-            f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}"
+            f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}.zarr"
         )
 
         print("Files in path: ", os.listdir(smartspim_config["dataset_path"]))

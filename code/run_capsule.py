@@ -135,8 +135,8 @@ def run():
         )
         smartspim_config['axis_pad'] = int(
             1.6 * max(
-                max(default_config['spot_parameters']['sigma_zyx'][1:]),
-                default_config['spot_parameters']['sigma_zyx'][0]
+                max(smartspim_config['spot_parameters']['sigma_zyx'][1:]),
+                smartspim_config['spot_parameters']['sigma_zyx'][0]
             ) * 5
         )
 
@@ -158,18 +158,17 @@ def run():
 
         print("Final cell segmentation config: ", smartspim_config)
         
-        logger = utils.create_logger(output_log_path=str(default_config["metadata_path"]))
+        logger = utils.create_logger(output_log_path=str(smartspim_config["metadata_path"]))
         smartspim_config['logger'] = logger
         
         # run detection
-        proposal_df = smartspim_cell_detection(**default_config)
+        proposal_df = smartspim_cell_detection(**smartspim_config)
         
         # create nueroglancer link
         smartspim_config["channel"] = channel_to_process
-        smartspim_config['output_folder'] = default_config['output_folder']
         acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
-        dynamic_range = ng_utils.calculate_dynamic_range(default_config["dataset_path"], 99, 3)
+        dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
         res = {}
         for axis in pipeline_config['stitching']['resolution']:
             res[axis['axis_name']] = axis['resolution']
@@ -192,7 +191,7 @@ def run():
         ng_utils.generate_neuroglancer_link(
             proposal_df,
             ng_config,
-            default_config,
+            smartspim_config,
             dynamic_range,
             logger
         )

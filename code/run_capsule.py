@@ -20,7 +20,7 @@ import shutil
 def get_data_config(
     data_folder: str,
     results_folder: str,
-    processing_manifest_path: str = "processing_manifest*", #"segmentation_processing_manifest*",
+    processing_manifest_path: str = "segmentation_processing_manifest*",
     data_description_path: str = "data_description.json",
 ) -> Tuple:
     """

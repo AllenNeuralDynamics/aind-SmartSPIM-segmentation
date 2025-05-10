@@ -19,7 +19,6 @@ from scipy.special import erf
 
 from .._shared.types import ArrayLike
 
-
 def prune_blobs(blobs_array: ArrayLike, distance: int, eps=0) -> Tuple[ArrayLike, ArrayLike]:
     """
     Prune blobs based on a radius distance.

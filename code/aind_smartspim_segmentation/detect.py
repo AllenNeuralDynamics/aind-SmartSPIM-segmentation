@@ -24,7 +24,6 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
-from neuroglancer import CoordinateSpace
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 

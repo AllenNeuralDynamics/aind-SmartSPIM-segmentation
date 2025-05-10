@@ -93,6 +93,22 @@ def prune_blobs_optimized(blobs_array, distance: int, eps=0) -> cupy.ndarray:
 
     return blobs_array[blobs_array[:, -1] > 0]
 
+def calculate_threshold(block_data):
+    
+    
+    block_mean = cupy.mean(block_data)
+    block_std = cupy.std(block_data)
+    
+    filt_thresh = block_mean + block_std * 2.5
+    
+    #empericallly derived threshold range
+    if filt_thresh < 10:
+        filt_thresh = 10
+    elif filt_thresh > 25:
+        filt_thresh = 25
+        
+    return filt_thresh
+
 
 def identify_initial_spots(
     data_block: ArrayLike,
@@ -151,11 +167,18 @@ def identify_initial_spots(
         background_image = cupy.percentile(non_zero_indices, background_percentage)
         data_block = cupy.maximum(background_image, data_block)
 
+        if raw_thresh < 0:
+            block_min = cupy_minimum_filter(data_block, min_zyx)
+            raw_thresh = cupy.median(data_block - block_min)
+
         # data_block[data_block < background_image] = background_image
         # Taking pad from original data, do not reflect if possible
         # data_block = cupy.pad(data_block, pad_size, mode=pad_mode)
 
         LoG_image = -gaussian_laplace(data_block, sigma_zyx)
+
+        if filt_thresh < 0:
+            filt_thresh = calculate_threshold(LoG_image)
 
         thresholded_img = cupy.logical_and(  # Logical and door to get truth values
             cupy.logical_and(

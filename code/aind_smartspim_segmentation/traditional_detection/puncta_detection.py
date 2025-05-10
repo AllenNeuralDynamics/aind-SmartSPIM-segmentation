@@ -11,6 +11,7 @@ import cupy
 import numpy as np
 from cupyx.scipy.ndimage import gaussian_laplace
 from cupyx.scipy.ndimage import maximum_filter as cupy_maximum_filter
+from cupyx.scipy.ndimage import minimum_filter as cupy_minimum_filter
 from scipy import spatial
 from scipy.special import erf
 

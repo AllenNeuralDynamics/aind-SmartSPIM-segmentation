@@ -11,11 +11,10 @@ from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
-from aind_smartspim_segmentation.params import get_yaml
 from aind_smartspim_segmentation.utils import utils
 from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 import shutil
 
 def get_data_config(
@@ -70,6 +69,30 @@ def get_data_config(
     print(f"processing manisfest copied to {results_folder}/{fname}")
 
     return derivatives_dict, smartspim_dataset
+
+def get_yaml(yaml_path: PathLike):
+    """
+    Gets the default configuration from a YAML file
+
+    Parameters
+    --------------
+    filename: str
+        Path where the YAML is located
+
+    Returns
+    --------------
+    dict
+        Dictionary with the yaml configuration
+    """
+
+    config = None
+    try:
+        with open(yaml_path, "r") as stream:
+            config = yaml.safe_load(stream)
+    except Exception as error:
+        raise error
+
+    return config
 
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import psutil
 import torch
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 from aind_data_schema.core.processing import DataProcess, ProcessName
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
@@ -28,7 +29,6 @@ from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
 from .__init__ import __maintainers__, __pipeline_version__, __version__
-from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
 from .traditional_detection.puncta_detection import (

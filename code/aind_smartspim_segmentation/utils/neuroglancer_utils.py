@@ -181,7 +181,7 @@ def generate_precomputed_cells(cells, precompute_path, configs):
 
     cell_list = []
     for idx, cell in cells.iterrows():
-        cell_list.append([int(cell["z"]), int(cell["y"]), int(cell["x"])])
+        cell_list.append([int(cell["Z"]), int(cell["Y"]), int(cell["X"])])
 
     l_bounds = np.min(cell_list, axis=0)
     u_bounds = np.max(cell_list, axis=0)
@@ -191,7 +191,7 @@ def generate_precomputed_cells(cells, precompute_path, configs):
 
     metadata = {
         "@type": "neuroglancer_annotations_v1",
-        "dimensions": dict((key, configs['dimensions'][key]) for key in ('z', 'y', 'x')),
+        "dimensions": dict((key, configs['dimensions'][key]) for key in ('Z', 'Y', 'X')),
         "lower_bound": [float(x) for x in l_bounds],
         "upper_bound": [float(x) for x in u_bounds],
         "annotation_type": "point",

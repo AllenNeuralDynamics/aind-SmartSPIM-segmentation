@@ -695,7 +695,10 @@ def smartspim_cell_detection(
 
         # Saving spots
         #proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
-        #proposal_df.to_csv(f"{output_folder}/detected_cells.csv")
+        #proposal_df.to_csv(
+        #    f"{output_folder}/detected_cells.csv",
+        #    index=False
+        #).astype("int")
 
         data_processes.append(
             DataProcess(
@@ -744,6 +747,6 @@ def smartspim_cell_detection(
             "smartspim_cell_proposals",
         )
 
-    return output_csv, voxel_size
+    return spots_df
 
 

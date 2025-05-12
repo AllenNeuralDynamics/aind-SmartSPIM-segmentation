@@ -749,4 +749,7 @@ def smartspim_cell_detection(
 
     return spots_df
 
+if __name__ == "__main__":
+    smartspim_cell_detection()
+
 

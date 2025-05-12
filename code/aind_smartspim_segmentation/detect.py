@@ -525,7 +525,7 @@ def smartspim_cell_detection(
 
     # Create a pool of processes
     #pool = multiprocessing.Pool(processes=exec_n_workers)
-    pool = _ProcessPool(nodes=exec_n_workers)
+    pool = _ProcessPool(exec_n_workers)
 
     # Variables for multiprocessing
     picked_blocks = []

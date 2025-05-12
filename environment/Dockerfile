@@ -29,6 +29,6 @@ RUN pip install -U --no-cache-dir \
     natsort==8.2.0 \
     zarr==2.18.0 \
     aind-data-schema==1.0.0 \
-    pathos=0.3.4 \
+    pathos==0.3.4 \
     awscli
 

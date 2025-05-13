@@ -10,7 +10,7 @@ import warnings
 # from functools import partial
 from time import time
 from typing import Dict, Optional, Tuple
-from pathos.pools import _ProcessPool
+#from pathos.pools import _ProcessPool
 
 import cupy
 import numpy as np
@@ -524,8 +524,8 @@ def smartspim_cell_detection(
     exec_n_workers = co_cpus
 
     # Create a pool of processes
-    #pool = multiprocessing.Pool(processes=exec_n_workers)
-    pool = _ProcessPool(exec_n_workers)
+    pool = multiprocessing.Pool(processes=exec_n_workers)
+    #pool = _ProcessPool(exec_n_workers)
 
     # Variables for multiprocessing
     picked_blocks = []

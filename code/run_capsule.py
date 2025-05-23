@@ -6,17 +6,16 @@ import json
 import logging
 import os
 import shutil
-import logging
-import yaml
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-from aind_smartspim_segmentation.detect import smartspim_cell_detection
-from aind_smartspim_segmentation.utils import utils
-from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
+import yaml
 from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
-import shutil
+from aind_smartspim_segmentation.detect import smartspim_cell_detection
+from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
+from aind_smartspim_segmentation.utils import utils
+
 
 def get_data_config(
     data_folder: str,
@@ -71,6 +70,7 @@ def get_data_config(
 
     return derivatives_dict, smartspim_dataset
 
+
 def get_yaml(yaml_path: PathLike):
     """
     Gets the default configuration from a YAML file
@@ -94,6 +94,7 @@ def get_yaml(yaml_path: PathLike):
         raise error
 
     return config
+
 
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
     """
@@ -155,16 +156,17 @@ def run():
     # the channels. If the channel key does not exist, it means
     # there are no segmentation channels splitted
     if channel_to_process is not None:
-
         # get default configs
         smartspim_config = get_yaml(
             os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
         )
-        smartspim_config['axis_pad'] = int(
-            1.6 * max(
-                max(smartspim_config['spot_parameters']['sigma_zyx'][1:]),
-                smartspim_config['spot_parameters']['sigma_zyx'][0]
-            ) * 5
+        smartspim_config["axis_pad"] = int(
+            1.6
+            * max(
+                max(smartspim_config["spot_parameters"]["sigma_zyx"][1:]),
+                smartspim_config["spot_parameters"]["sigma_zyx"][0],
+            )
+            * 5
         )
 
         # add paths to smartspim_config
@@ -176,7 +178,7 @@ def run():
 
         smartspim_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
         smartspim_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
-        
+
         utils.create_folder(dest_dir=str(smartspim_config["metadata_path"]), verbose=True)
 
         print("Initial cell detection config: ", smartspim_config)
@@ -184,45 +186,41 @@ def run():
         smartspim_config["name"] = smartspim_dataset_name
 
         print("Final cell segmentation config: ", smartspim_config)
-        
+
         logger = utils.create_logger(output_log_path=str(smartspim_config["metadata_path"]))
-        smartspim_config['logger'] = logger
-        
+        smartspim_config["logger"] = logger
+
         # run detection
         proposal_df = smartspim_cell_detection(**smartspim_config)
-        
+
         # create nueroglancer link
         smartspim_config["channel"] = channel_to_process
         acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
         dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
         res = {}
-        for axis in pipeline_config['stitching']['resolution']:
-            res[axis['axis_name']] = axis['resolution']
-    
+        for axis in pipeline_config["stitching"]["resolution"]:
+            res[axis["axis_name"]] = axis["resolution"]
+
         ng_config = {
             "base_url": "https://neuroglancer-demo.appspot.com/#!",
             "crossSectionScale": 15,
             "projectionScale": 16384,
             "orientation": acquisition,
-            "dimensions" : {
-                "z": [res['Z'] * 10**-6, 'm' ],
-                "y": [res['Y'] * 10**-6, 'm' ],
-                "x": [res['X'] * 10**-6, 'm' ],
-                "t": [0.001, 's'],
+            "dimensions": {
+                "z": [res["Z"] * 10**-6, "m"],
+                "y": [res["Y"] * 10**-6, "m"],
+                "x": [res["X"] * 10**-6, "m"],
+                "t": [0.001, "s"],
             },
             "rank": 3,
             "gpuMemoryLimit": 1500000000,
         }
-        
+
         ng_utils.generate_neuroglancer_link(
-            proposal_df,
-            ng_config,
-            smartspim_config,
-            dynamic_range,
-            logger
+            proposal_df, ng_config, smartspim_config, dynamic_range, logger
         )
-        
+
     else:
         print(f"No segmentation channel, pipeline config: {pipeline_config}")
         utils.save_dict_as_json(

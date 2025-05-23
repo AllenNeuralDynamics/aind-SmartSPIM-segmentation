@@ -94,20 +94,19 @@ def prune_blobs_optimized(blobs_array, distance: int, eps=0) -> cupy.ndarray:
 
     return blobs_array[blobs_array[:, -1] > 0]
 
+
 def calculate_threshold(block_data):
-    
-    
     block_mean = cupy.mean(block_data)
     block_std = cupy.std(block_data)
-    
+
     filt_thresh = block_mean + block_std * 2.5
-    
-    #empericallly derived threshold range
+
+    # empericallly derived threshold range
     if filt_thresh < 10:
         filt_thresh = 10
     elif filt_thresh > 25:
         filt_thresh = 25
-        
+
     return filt_thresh
 
 
@@ -198,6 +197,7 @@ def identify_initial_spots(
         )
 
     return spots, LoG_image
+
 
 def scan(img: ArrayLike, spots: ArrayLike, radius: int) -> Tuple[ArrayLike, ArrayLike]:
     """
@@ -294,6 +294,7 @@ def fit_gaussian(S, fit_sigmas, r):
     else:
         return False
 
+
 def intensity_integrated_gaussian3D(center, sigmas, limit) -> ArrayLike:
     """
     Calculates the integrated intensity of a 3D Gaussian distribution over a voxel grid.
@@ -352,6 +353,7 @@ def intensity_integrated_gaussian3D(center, sigmas, limit) -> ArrayLike:
     # Compute the product along the first axis
     return np.prod(np.meshgrid(*diff), axis=0)
 
+
 def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[List, ArrayLike]]:
     """
     Scans the spots to get image data
@@ -392,6 +394,7 @@ def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[L
             y_min:y_max,  # noqa: E203
             x_min:x_max,  # noqa: E203
         ]
+
 
 def estimate_background_foreground(
     buffer_context: ArrayLike,
@@ -576,7 +579,6 @@ def traditional_3D_spot_detection(
         logger.info(f"Initial spots time: {initial_spots_end_time - initial_spots_start_time}")
 
     if initial_spots is not None and len(initial_spots) and gaussian_laplaced_img is not None:
-
         minYX = min_zyx[-1]
 
         prunning_start_time = time()
@@ -625,7 +627,6 @@ def traditional_3D_spot_detection(
             return None
 
         if run_context_estimates:
-
             data_block = data_block.get()
 
             # Making sure buffer radius is correct

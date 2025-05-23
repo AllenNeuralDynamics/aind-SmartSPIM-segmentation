@@ -19,6 +19,7 @@ from scipy.signal import argrelmin
 
 from .._shared.types import ArrayLike, PathLike
 
+
 def find_good_blocks(img, counts, chunk, ds=3):
     """
     Function to Identify good blocks to process
@@ -46,7 +47,9 @@ def find_good_blocks(img, counts, chunk, ds=3):
         img = np.asarray(img)
 
     img = ndi.gaussian_filter(img, sigma=5.0, mode="constant", cval=0)
-    count, bin_count = np.histogram(img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True)
+    count, bin_count = np.histogram(
+        img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True
+    )
 
     try:
         thresh = argrelmin(count, order=10)[0][0]
@@ -98,6 +101,7 @@ def find_good_blocks(img, counts, chunk, ds=3):
 
     return block_dict
 
+
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
     """
     Create new folders.
@@ -121,7 +125,6 @@ def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
         except OSError as e:
             if e.errno != os.errno.EEXIST:
                 raise
-
 
 
 def profile_resources(

@@ -10,14 +10,12 @@ import warnings
 # from functools import partial
 from time import time
 from typing import Dict, Optional, Tuple
-from pathos.pools import _ProcessPool
 
 import cupy
 import numpy as np
 import pandas as pd
 import psutil
 import torch
-from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 from aind_data_schema.core.processing import DataProcess, ProcessName
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
@@ -26,17 +24,17 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
+from pathos.pools import _ProcessPool
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
 from .__init__ import __maintainers__, __pipeline_version__, __version__
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
-from .traditional_detection.puncta_detection import (
-    prune_blobs,
-    traditional_3D_spot_detection,
-)
+from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_spot_detection
 from .utils import utils
+
 
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     """
@@ -246,7 +244,6 @@ def execute_worker(
             logger.info(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
 
         else:
-
             # Recover global position of internal chunk
             (
                 global_coord_pos,
@@ -339,10 +336,10 @@ def smartspim_cell_detection(
     dataset_path: PathLike
         Path where the zarr dataset is stored. It could
         be a local path or in a S3 path.
-        
+
     name: str
         name of the dataset formated as SmartSPIM_***_stitched_***
-    
+
     multiscale: str
         Multiscale to process
 
@@ -524,7 +521,7 @@ def smartspim_cell_detection(
     exec_n_workers = co_cpus
 
     # Create a pool of processes
-    #pool = multiprocessing.Pool(processes=exec_n_workers)
+    # pool = multiprocessing.Pool(processes=exec_n_workers)
     pool = _ProcessPool(exec_n_workers)
 
     # Variables for multiprocessing
@@ -667,7 +664,6 @@ def smartspim_cell_detection(
         )
         logger.info(message)
 
-
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
         # Saving spots as numpy and csv
@@ -696,11 +692,11 @@ def smartspim_cell_detection(
         )
 
         # Saving spots
-        #proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
-        #proposal_df.to_csv(
+        # proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
+        # proposal_df.to_csv(
         #    f"{output_folder}/detected_cells.csv",
         #    index=False
-        #).astype("int")
+        # ).astype("int")
 
         data_processes.append(
             DataProcess(
@@ -751,7 +747,6 @@ def smartspim_cell_detection(
 
     return spots_df
 
+
 if __name__ == "__main__":
     smartspim_cell_detection()
-
-

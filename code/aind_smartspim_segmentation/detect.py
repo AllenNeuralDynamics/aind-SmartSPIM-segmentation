@@ -24,20 +24,16 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
-from neuroglancer import CoordinateSpace
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
+from pathos.pools import _ProcessPool
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
 from .__init__ import __maintainers__, __pipeline_version__, __version__
-from ._shared.types import ArrayLike, PathLike
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
-from .traditional_detection.puncta_detection import (
-    prune_blobs,
-    traditional_3D_spot_detection,
-)
+from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_spot_detection
 from .utils import utils
-from .utils.generate_precomputed_format import generate_precomputed_spots
 
 
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
@@ -248,7 +244,6 @@ def execute_worker(
             logger.info(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
 
         else:
-
             # Recover global position of internal chunk
             (
                 global_coord_pos,
@@ -319,6 +314,7 @@ def _execute_worker(params: Dict):
 
 def smartspim_cell_detection(
     dataset_path: PathLike,
+    name: str,
     multiscale: str,
     prediction_chunksize: Tuple[int, ...],
     target_size_mb: int,
@@ -340,6 +336,9 @@ def smartspim_cell_detection(
     dataset_path: PathLike
         Path where the zarr dataset is stored. It could
         be a local path or in a S3 path.
+
+    name: str
+        name of the dataset formated as SmartSPIM_***_stitched_***
 
     multiscale: str
         Multiscale to process
@@ -489,7 +488,7 @@ def smartspim_cell_detection(
     zarr_data_loader, zarr_dataset = create_data_loader(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
-        prediction_chunksize=prediction_chunksize,
+        prediction_chunksize=tuple(prediction_chunksize),
         overlap_prediction_chunksize=overlap_prediction_chunksize,
         n_workers=n_workers,
         batch_size=batch_size,
@@ -522,7 +521,8 @@ def smartspim_cell_detection(
     exec_n_workers = co_cpus
 
     # Create a pool of processes
-    pool = multiprocessing.Pool(processes=exec_n_workers)
+    # pool = multiprocessing.Pool(processes=exec_n_workers)
+    pool = _ProcessPool(exec_n_workers)
 
     # Variables for multiprocessing
     picked_blocks = []
@@ -664,26 +664,6 @@ def smartspim_cell_detection(
         )
         logger.info(message)
 
-        """
-        # TODO add chunked precomputed format for points with multiscales
-        coord_space = CoordinateSpace(
-            names=["z", "y", "x"],
-            units=["um", "um", "um"],
-            scales=[
-                image_metadata["axes"]["z"]["scale"],
-                image_metadata["axes"]["y"]["scale"],
-                image_metadata["axes"]["x"]["scale"],
-            ],
-        )
-
-        logger.info(f"Neuroglancer coordinate space: {coord_space}")
-        generate_precomputed_spots(
-            spots=spots_global_coordinate_prunned[:, :3],  # Only ZYX locations
-            path=f"{output_folder}/precomputed",
-            res=coord_space,
-        )
-        """
-
         logger.info(f"Processing time: {end_time - start_time} seconds")
 
         # Saving spots as numpy and csv
@@ -710,6 +690,13 @@ def smartspim_cell_detection(
             output_csv,
             index=False,
         )
+
+        # Saving spots
+        # proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
+        # proposal_df.to_csv(
+        #    f"{output_folder}/detected_cells.csv",
+        #    index=False
+        # ).astype("int")
 
         data_processes.append(
             DataProcess(
@@ -758,4 +745,8 @@ def smartspim_cell_detection(
             "smartspim_cell_proposals",
         )
 
-    return output_csv, voxel_size
+    return spots_df
+
+
+if __name__ == "__main__":
+    smartspim_cell_detection()

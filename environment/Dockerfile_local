@@ -63,6 +63,7 @@ RUN apt-get update && \
         python3.10-venv \
         python3.10-distutils \
         libgomp1 \
+        git \
         && \
     rm -rf /var/lib/apt/lists/*
 

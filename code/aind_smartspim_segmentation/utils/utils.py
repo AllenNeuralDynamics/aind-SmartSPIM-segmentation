@@ -572,3 +572,37 @@ def generate_processing(
     )
 
     processing.write_standard_file(output_directory=dest_processing)
+
+def save_dict_as_json(filename: str, dictionary: dict, verbose: Optional[bool] = False) -> None:
+    """
+    Saves a dictionary as a json file.
+
+    Parameters
+    ------------------------
+
+    filename: str
+        Name of the json file.
+
+    dictionary: dict
+        Dictionary that will be saved as json.
+
+    verbose: Optional[bool]
+        True if you want to print the path where the file was saved.
+
+    """
+
+    if dictionary is None:
+        dictionary = {}
+
+    else:
+        for key, value in dictionary.items():
+            # Converting path to str to dump dictionary into json
+            if check_path_instance(value):
+                # TODO fix the \\ encode problem in dump
+                dictionary[key] = str(value)
+
+    with open(filename, "w") as json_file:
+        json.dump(dictionary, json_file, indent=4)
+
+    if verbose:
+        print(f"- Json file saved: {filename}")

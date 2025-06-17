@@ -425,37 +425,6 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Total Bytes Received: {get_size(net_io.bytes_recv)}")
 
 
-def check_path_instance(obj: object) -> bool:
-    """
-    Checks if an objects belongs to pathlib.Path subclasses.
-
-    Parameters
-    ------------------------
-
-    dest_dir: str
-        Path where the folder will be created if it does not exist.
-
-    verbose: Optional[bool]
-        If we want to show information about the folder status. Default False.
-
-    Raises
-    ------------------------
-
-    OSError:
-        if the folder exists.
-
-    """
-
-    if not (os.path.exists(dest_dir)):
-        try:
-            if verbose:
-                print(f"Creating new directory: {dest_dir}")
-            os.makedirs(dest_dir)
-        except OSError as e:
-            if e.errno != os.errno.EEXIST:
-                raise
-
-
 def parse_zarr_metadata(metadata: Dict, multiscale: Optional[str] = None) -> Dict:
     """
     Parses the zarr metadata and retrieves
@@ -593,13 +562,6 @@ def save_dict_as_json(filename: str, dictionary: dict, verbose: Optional[bool] =
 
     if dictionary is None:
         dictionary = {}
-
-    else:
-        for key, value in dictionary.items():
-            # Converting path to str to dump dictionary into json
-            if check_path_instance(value):
-                # TODO fix the \\ encode problem in dump
-                dictionary[key] = str(value)
 
     with open(filename, "w") as json_file:
         json.dump(dictionary, json_file, indent=4)

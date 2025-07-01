@@ -386,12 +386,13 @@ def smartspim_cell_detection(
     if n_workers > co_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
 
-    logger.info(f"{20*'='} Running puncta detection {20*'='}")
+    logger.info(f"{20*'='} Running cell proposal detection {20*'='}")
     logger.info(f"Output folder: {output_folder}")
 
     utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
+    logger.info(f"Using {co_cpus} workers...")
 
     # Tracking compute resources
     # Subprocess to track used resources
@@ -460,11 +461,11 @@ def smartspim_cell_detection(
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
 
-    voxel_size = [
-        image_metadata["axes"]["z"]["scale"],
-        image_metadata["axes"]["y"]["scale"],
-        image_metadata["axes"]["x"]["scale"],
-    ]
+    # voxel_size = [
+    #     image_metadata["axes"]["z"]["scale"],
+    #     image_metadata["axes"]["y"]["scale"],
+    #     image_metadata["axes"]["x"]["scale"],
+    # ]
 
     logger.info(f"Filtered Image metadata: {image_metadata}")
     end_date_time = time()

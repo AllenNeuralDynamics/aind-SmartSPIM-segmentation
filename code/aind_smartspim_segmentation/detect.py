@@ -398,18 +398,21 @@ def smartspim_cell_detection(
 
         runtime_version = cupy.cuda.runtime.runtimeGetVersion()
         driver_version = cupy.cuda.driver.get_driver_version()
+        logger.info(f"Runtime version: {runtime_version}")
+        logger.info(f"Runtime driver version: {driver_version}")
+
 
     except:
         print("Error")
 
     if cupy.cuda.runtime.getDeviceCount() > 0:
-        print("CUDA-capable GPU is available.")
-        print("GPU name:", cupy.cuda.runtime.getDeviceProperties(0)["name"])
+        logger.info("CUDA-capable GPU is available.")
+        logger.info(f"GPU name: {cupy.cuda.runtime.getDeviceProperties(0)["name"]}")
     else:
         print("No CUDA-capable GPU detected.")
 
-    print("CUDA Runtime Version:", format_cuda_version(runtime_version))
-    print("CUDA Driver Version:", format_cuda_version(driver_version))
+    logger.info("CUDA Runtime Version:", format_cuda_version(runtime_version))
+    logger.info("CUDA Driver Version:", format_cuda_version(driver_version))
 
     logger.info(f"Using {co_cpus} workers...")
 

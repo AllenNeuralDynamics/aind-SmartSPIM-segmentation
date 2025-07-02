@@ -407,7 +407,7 @@ def smartspim_cell_detection(
 
     if cupy.cuda.runtime.getDeviceCount() > 0:
         logger.info("CUDA-capable GPU is available.")
-        logger.info(f"GPU name: {cupy.cuda.runtime.getDeviceProperties(0)["name"]}")
+        logger.info(f"GPU name: {cupy.cuda.runtime.getDeviceProperties(0)['name']}")
     else:
         print("No CUDA-capable GPU detected.")
 

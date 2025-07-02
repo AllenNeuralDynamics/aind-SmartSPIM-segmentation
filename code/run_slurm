@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-nvcc --version
+lspci | grep -i nvidia
 
 # This is the master script for the capsule. When you click "Reproducible Run", the code in this file will execute.
 python -u run_capsule.py "$@"

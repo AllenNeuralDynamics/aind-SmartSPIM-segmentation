@@ -392,6 +392,8 @@ def smartspim_cell_detection(
     utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
+    cuda_version = cupy.cuda.runtime.getVersion()
+    logger.info(f"CUDA Version: {cuda_version // 1000}.{(cuda_version // 10) % 100}.{cuda_version % 10}")
     logger.info(f"Using {co_cpus} workers...")
 
     # Tracking compute resources
@@ -532,6 +534,7 @@ def smartspim_cell_detection(
     output_csv = None
 
     logger.info(f"Number of workers processing data: {exec_n_workers}")
+    
     with cupy.cuda.Device(device=device):
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):

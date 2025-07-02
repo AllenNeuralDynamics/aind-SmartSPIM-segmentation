@@ -392,8 +392,6 @@ def smartspim_cell_detection(
     utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
-    cuda_version = cupy.cuda.runtime.getVersion()
-    logger.info(f"CUDA Version: {cuda_version // 1000}.{(cuda_version // 10) % 100}.{cuda_version % 10}")
     logger.info(f"Using {co_cpus} workers...")
 
     # Tracking compute resources

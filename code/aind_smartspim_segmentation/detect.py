@@ -392,28 +392,6 @@ def smartspim_cell_detection(
     utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
-    try:
-        def format_cuda_version(v):
-            return f"{v // 1000}.{(v % 1000) // 10}"
-
-        runtime_version = cupy.cuda.runtime.runtimeGetVersion()
-        driver_version = cupy.cuda.driver.get_driver_version()
-        logger.info(f"Runtime version: {runtime_version}")
-        logger.info(f"Runtime driver version: {driver_version}")
-
-
-    except:
-        print("Error")
-
-    if cupy.cuda.runtime.getDeviceCount() > 0:
-        logger.info("CUDA-capable GPU is available.")
-        logger.info(f"GPU name: {cupy.cuda.runtime.getDeviceProperties(0)['name']}")
-    else:
-        print("No CUDA-capable GPU detected.")
-
-    logger.info("CUDA Runtime Version:", format_cuda_version(runtime_version))
-    logger.info("CUDA Driver Version:", format_cuda_version(driver_version))
-
     logger.info(f"Using {co_cpus} workers...")
 
     # Tracking compute resources

@@ -38,13 +38,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
         scikit-image==0.22.0 \
         matplotlib==3.8.2 \
         scipy==1.15.2 \
-        cupy-cuda12x==13.1.0 \
+        cupy-cuda12x==12.2.0 \
         neuroglancer==2.40.1 \
         aind-data-schema==1.2.0 \
         pathos==0.3.4
 
 # Runtime stage with minimal CUDA
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
 
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Cell Proposals" \
@@ -77,6 +77,7 @@ RUN apt-get update && \
 # Copy only the built virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.2/compat/:$LD_LIBRARY_PATH
 
 # Set environment variables for TensorFlow GPU
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true

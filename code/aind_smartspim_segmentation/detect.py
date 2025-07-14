@@ -380,11 +380,11 @@ def smartspim_cell_detection(
         Path where the CSV with the idenfied proposals is stored.
         List with the voxel size in ZYX order
     """
-    co_cpus = int(utils.get_code_ocean_cpu_limit())
+    available_cpus = int(utils.get_cpu_limit())
     data_processes = []
 
-    if n_workers > co_cpus:
-        raise ValueError(f"Provided workers {n_workers} > current workers {co_cpus}")
+    if n_workers > available_cpus:
+        raise ValueError(f"Provided workers {n_workers} > current workers {available_cpus}")
 
     logger.info(f"{20*'='} Running cell proposal detection {20*'='}")
     logger.info(f"Output folder: {output_folder}")
@@ -392,7 +392,7 @@ def smartspim_cell_detection(
     utils.print_system_information(logger)
 
     logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
-    logger.info(f"Using {co_cpus} workers...")
+    logger.info(f"Using {available_cpus} workers...")
 
     # Tracking compute resources
     # Subprocess to track used resources
@@ -519,7 +519,7 @@ def smartspim_cell_detection(
     spots_global_coordinate = None
 
     # Setting exec workers to CO CPUs
-    exec_n_workers = co_cpus
+    exec_n_workers = available_cpus
 
     # Create a pool of processes
     # pool = multiprocessing.Pool(processes=exec_n_workers)
@@ -532,7 +532,7 @@ def smartspim_cell_detection(
     output_csv = None
 
     logger.info(f"Number of workers processing data: {exec_n_workers}")
-    
+
     with cupy.cuda.Device(device=device):
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):

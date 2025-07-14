@@ -219,7 +219,7 @@ def get_size(bytes, suffix: str = "B") -> str:
         bytes /= factor
 
 
-def get_code_ocean_cpu_limit():
+def get_cpu_limit():
     """
     Gets the Code Ocean capsule CPU limit
 
@@ -232,10 +232,16 @@ def get_code_ocean_cpu_limit():
     co_cpus = os.environ.get("CO_CPUS")
     aws_batch_job_id = os.environ.get("AWS_BATCH_JOB_ID")
 
+    # Trying to get CPU cores from Code Ocean
     if co_cpus:
         return co_cpus
     if aws_batch_job_id:
         return 1
+
+    # Trying to get CPU cores from SLURM
+    slurm_cpus = os.environ.get("SLURM_CPUS_ON_NODE")
+    if slurm_cpus:
+        return slurm_cpus
 
     try:
         with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fp:
@@ -252,6 +258,22 @@ def get_code_ocean_cpu_limit():
     return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
 
 
+def get_memory_limit_bytes():
+    """
+    Gets memory limit in gbs
+    """
+    memory = os.environ.get("CO_MEMORY")
+
+    if not memory:
+        try:
+            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                return int(f.read().strip())
+        except FileNotFoundError:
+            memory = None  # Not a cgroup-aware system
+
+    return memory
+
+
 def print_system_information(logger: logging.Logger):
     """
     Prints system information
@@ -261,20 +283,22 @@ def print_system_information(logger: logging.Logger):
     logger: logging.Logger
         Logger object
     """
-    co_memory = os.environ.get("CO_MEMORY")
+    memory = get_memory_limit_bytes()
 
-    if co_memory:
-        co_memory = int(co_memory)
-        co_memory = get_size(co_memory)
+    if memory:
+        memory = int(memory)
+        memory = get_size(memory)
 
     # System info
     sep = "=" * 20
-    logger.info(f"{sep} Code Ocean Information {sep}")
-    logger.info(f"Code Ocean assigned cores: {get_code_ocean_cpu_limit()}")
-    logger.info(f"Code Ocean assigned memory: {co_memory}")
+    logger.info(f"{sep} Machine Information {sep}")
+    logger.info(f"Assigned cores: {get_cpu_limit()}")
+    logger.info(f"Assigned memory: {memory} GBs")
     logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
     logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
     logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
+    logger.info(f"Is pipeline execution in sLURM?: {bool(os.environ.get('SLURM_JOB_ID'))}")
+    logger.info(f"SLURM ID: {os.environ.get('SLURM_JOB_ID')}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()
@@ -462,6 +486,7 @@ def generate_processing(
     )
 
     processing.write_standard_file(output_directory=dest_processing)
+
 
 def save_dict_as_json(filename: str, dictionary: dict, verbose: Optional[bool] = False) -> None:
     """

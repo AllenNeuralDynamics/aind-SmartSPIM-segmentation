@@ -313,11 +313,11 @@ def _execute_worker(params: Dict):
 
 
 def has_enough_gpu_memory(
+    cupy_device,
     num_blocks: int,
     block_shape: tuple,
     dtype: np.dtype,
     usage_fraction: float = 0.8,
-    device_id: int = 0,
 ) -> Tuple[bool, float]:
     """
     Check if the GPU has enough memory to hold `num_blocks` of a given block shape and dtype.
@@ -327,18 +327,21 @@ def has_enough_gpu_memory(
         block_shape (tuple): Shape of a single block (e.g., (64, 128, 128)).
         dtype (np.dtype): Numpy dtype (e.g., np.float32).
         usage_fraction (float): Fraction of total memory allowed to be used.
-        device_id (int): CUDA device ID.
 
     Returns:
         bool: True if enough memory is available, False otherwise.
         float: memory info
     """
-    device = cupy.cuda.Device(device_id)
-    _, total_memory = device.mem_info
-    target_memory = int(float(total_memory) * usage_fraction)
+    try:
+        _, total_memory = cupy_device.mem_info
+        target_memory = int(float(total_memory) * usage_fraction)
 
-    block_size_bytes = np.prod(block_shape) * np.dtype(dtype).itemsize
-    total_required_memory = num_blocks * block_size_bytes
+        block_size_bytes = np.prod(block_shape) * np.dtype(dtype).itemsize
+        total_required_memory = num_blocks * block_size_bytes
+
+    except cupy.cuda.runtime.CUDARuntimeError as e:
+        print(f"[GPU ERROR] CuPy could not access the device: {e}")
+        return False, 0.0
 
     return total_required_memory <= target_memory, float(total_memory)
 
@@ -482,19 +485,6 @@ def smartspim_cell_detection(
             .as_dask_array()
         )
 
-    workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
-        num_blocks=available_cpus,
-        block_shape=tuple(np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)),
-        dtype=np.float32,
-        usage_fraction=0.8,
-        device_id=device,
-    )
-
-    logger.info(f"GPU available information: {gpu_mem_info}")
-
-    if not workers_gpus_valid:
-        raise ValueError(f"Not enough memory for {available_cpus} workers with 80% usage factor!")
-
     image_metadata = (
         ImageReaderFactory()
         .create(data_path=dataset_path, parse_path=False, multiscale=multiscale)
@@ -577,7 +567,21 @@ def smartspim_cell_detection(
 
     logger.info(f"Number of workers processing data: {exec_n_workers}")
 
-    with cupy.cuda.Device(device=device):
+    with cupy.cuda.Device(device=device) as cupy_device:
+
+        workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
+            num_blocks=available_cpus,
+            block_shape=tuple(np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)),
+            dtype=np.float32,
+            usage_fraction=0.8,
+            cupy_device=cupy_device,
+        )
+
+        logger.info(f"GPU available information: {gpu_mem_info}")
+
+        if not workers_gpus_valid:
+            raise ValueError(f"Not enough memory for {available_cpus} workers with 80% usage factor!")
+
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):
                 message = (

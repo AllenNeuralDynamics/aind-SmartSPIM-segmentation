@@ -260,18 +260,50 @@ def get_cpu_limit():
 
 def get_memory_limit_bytes():
     """
-    Gets memory limit in gbs
+    Gets the best estimate of the memory limit (in bytes) for the current job.
+    Order of precedence:
+    1. CO_MEMORY environment variable (assumed in GB)
+    2. Cgroup memory limit (from /sys/fs/cgroup/)
+    3. SLURM environment variables
+    4. psutil system memory (total)
     """
-    memory = os.environ.get("CO_MEMORY")
-
-    if not memory:
+    # 1. CO_MEMORY (in GB)
+    memory_env = os.environ.get("CO_MEMORY")
+    if memory_env:
         try:
-            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
-                return int(f.read().strip())
-        except FileNotFoundError:
-            memory = None  # Not a cgroup-aware system
+            return int(memory_env)  # Convert GB → bytes
+        except ValueError:
+            pass  # Invalid format, fallback
 
-    return memory
+    # 2. cgroup memory limit (in bytes)
+    cgroup_path = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    try:
+        with open(cgroup_path, "r") as f:
+            mem_bytes = int(f.read().strip())
+            # Some systems report a huge number when no limit is set
+            if mem_bytes < 1 << 50:  # Filter out values >1PB
+                return mem_bytes
+    except FileNotFoundError:
+        pass
+
+    # 3. SLURM memory allocation
+    mem_per_node = os.environ.get("SLURM_MEM_PER_NODE")  # in MB
+    if mem_per_node:
+        try:
+            return int(mem_per_node) * 1024**2  # MB → bytes
+        except ValueError:
+            pass
+
+    mem_per_cpu = os.environ.get("SLURM_MEM_PER_CPU")  # in MB
+    cpus = os.environ.get("SLURM_CPUS_ON_NODE")
+    if mem_per_cpu and cpus:
+        try:
+            return int(mem_per_cpu) * int(cpus) * 1024**2  # MB → bytes
+        except ValueError:
+            pass
+
+    # 4. Fallback: system-wide total memory
+    return psutil.virtual_memory().total
 
 
 def print_system_information(logger: logging.Logger):
@@ -289,6 +321,7 @@ def print_system_information(logger: logging.Logger):
         memory = int(memory)
         memory = get_size(memory)
 
+    slurm_id = os.environ.get("SLURM_JOB_ID")
     # System info
     sep = "=" * 20
     logger.info(f"{sep} Machine Information {sep}")
@@ -297,8 +330,8 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
     logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
     logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
-    logger.info(f"Is pipeline execution in sLURM?: {bool(os.environ.get('SLURM_JOB_ID'))}")
-    logger.info(f"SLURM ID: {os.environ.get('SLURM_JOB_ID')}")
+    logger.info(f"Is pipeline execution in SLURM?: {bool(slurm_id)}")
+    logger.info(f"SLURM ID: {slurm_id}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()

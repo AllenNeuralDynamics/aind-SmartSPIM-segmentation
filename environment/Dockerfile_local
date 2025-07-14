@@ -1,6 +1,6 @@
 # Builder stage with full TensorFlow for compatibility
 # FROM tensorflow/tensorflow:2.15.0-gpu as builder
-FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04 as builder
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -41,15 +41,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
         scikit-image==0.22.0 \
         matplotlib==3.8.2 \
         scipy==1.15.2 \
-        "nvidia-cuda-runtime-cu12==12.9.*" \
         cupy-cuda12x==13.4.1 \
         neuroglancer==2.40.1 \
         aind-data-schema==1.2.0 \
         pathos==0.3.4 \
         git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions
 
+#"nvidia-cuda-runtime-cu12==12.8.*" \
+ 
 # Runtime stage with minimal CUDA
-FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Cell Proposals" \
@@ -82,7 +83,7 @@ RUN apt-get update && \
 # Copy only the built virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV CUDA_PATH=/usr/local/cuda-12.9
+ENV CUDA_PATH=/usr/local/cuda-12.8
 ENV LD_LIBRARY_PATH=$CUDA_PATH/lib64:$LD_LIBRARY_PATH
 
 # Set environment variables for TensorFlow GPU

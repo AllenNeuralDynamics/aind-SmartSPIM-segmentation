@@ -13,7 +13,10 @@ RUN apt-get update && \
         software-properties-common \
         gnupg2 \
         curl \
-        lsb-release && \
+        lsb-release \
+        nvidia-container-toolkit \
+        nvidia-utils-535 \
+        && \
     gpg --keyserver keyserver.ubuntu.com --recv-keys BA6932366A755776 && \
     gpg --export --armor BA6932366A755776 > /etc/apt/trusted.gpg.d/deadsnakes.asc && \
     echo "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu $(lsb_release -cs) main" \
@@ -33,18 +36,19 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Install Python dependencies with aggressive cleanup
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-        aind-large-scale-prediction==1.0.0 \
         numpy==1.26.4 \
         scikit-image==0.22.0 \
         matplotlib==3.8.2 \
         scipy==1.15.2 \
-        cupy-cuda12x==12.2.0 \
+        cupy-cuda12x==13.1.0 \
+        "nvidia-cuda-runtime-cu12==12.8.*" \
         neuroglancer==2.40.1 \
         aind-data-schema==1.2.0 \
-        pathos==0.3.4
+        pathos==0.3.4 \
+        git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions
 
 # Runtime stage with minimal CUDA
-FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Cell Proposals" \
@@ -77,7 +81,8 @@ RUN apt-get update && \
 # Copy only the built virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV LD_LIBRARY_PATH=/usr/local/cuda-12.2/compat/:$LD_LIBRARY_PATH
+ENV CUDA_PATH=/usr/local/cuda-12.8
+ENV LD_LIBRARY_PATH=$CUDA_PATH/lib64:$LD_LIBRARY_PATH
 
 # Set environment variables for TensorFlow GPU
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true

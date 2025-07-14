@@ -386,7 +386,7 @@ def smartspim_cell_detection(
     if n_workers > available_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {available_cpus}")
 
-    logger.info(f"{20*'='} Running cell proposal detection {20*'='}")
+    logger.info(f"{20*'='} Running cell proposal detection {20*'='} New workers pull")
     logger.info(f"Output folder: {output_folder}")
 
     utils.print_system_information(logger)

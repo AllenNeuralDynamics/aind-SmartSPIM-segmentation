@@ -239,7 +239,8 @@ def get_cpu_limit():
         return 1
 
     # Trying to get CPU cores from SLURM
-    slurm_cpus = os.environ.get("SLURM_CPUS_ON_NODE")
+    slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
+    # Total cpus in node SLURM_CPUS_ON_NODE
     if slurm_cpus:
         return slurm_cpus
 

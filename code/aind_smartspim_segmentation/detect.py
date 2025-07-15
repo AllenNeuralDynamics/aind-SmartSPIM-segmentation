@@ -571,7 +571,9 @@ def smartspim_cell_detection(
 
         workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
             num_blocks=available_cpus,
-            block_shape=tuple(np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)),
+            block_shape=tuple(
+                np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)
+            ),
             dtype=np.float32,
             usage_fraction=0.8,
             cupy_device=cupy_device,
@@ -580,7 +582,9 @@ def smartspim_cell_detection(
         logger.info(f"GPU available information: {gpu_mem_info}")
 
         if not workers_gpus_valid:
-            raise ValueError(f"Not enough memory for {available_cpus} workers with 80% usage factor!")
+            raise ValueError(
+                f"Not enough memory for {available_cpus} workers with 80% usage factor!"
+            )
 
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):

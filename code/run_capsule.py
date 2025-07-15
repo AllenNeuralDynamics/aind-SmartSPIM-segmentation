@@ -190,12 +190,18 @@ def run():
         logger = utils.create_logger(output_log_path=str(smartspim_config["metadata_path"]))
         smartspim_config["logger"] = logger
 
+        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+
+        if not len(acquisition):
+            raise ValueError(f"Please, provide a valid acquisition!")
+
+        print("Acquisition: ", acquisition)
+
         # run detection
         proposal_df = smartspim_cell_detection(**smartspim_config)
 
         # create nueroglancer link
         smartspim_config["channel"] = channel_to_process
-        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
         dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
         res = {}

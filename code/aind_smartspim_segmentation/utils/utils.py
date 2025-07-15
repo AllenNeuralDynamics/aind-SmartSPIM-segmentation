@@ -239,7 +239,8 @@ def get_cpu_limit():
         return 1
 
     # Trying to get CPU cores from SLURM
-    slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
+    slurm_cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
+    print("SLURM CPUs ", slurm_cpus)
     # Total cpus in node SLURM_CPUS_ON_NODE
     if slurm_cpus:
         return slurm_cpus
@@ -296,7 +297,7 @@ def get_memory_limit_bytes():
             pass
 
     mem_per_cpu = os.environ.get("SLURM_MEM_PER_CPU")  # in MB
-    cpus = os.environ.get("SLURM_CPUS_ON_NODE")
+    cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
     if mem_per_cpu and cpus:
         try:
             return int(mem_per_cpu) * int(cpus) * 1024**2  # MB → bytes
@@ -322,7 +323,7 @@ def print_system_information(logger: logging.Logger):
         memory = int(memory)
         memory = get_size(memory)
 
-    slurm_id = os.environ.get("SLURM_JOB_ID")
+    slurm_id = os.environ.get("SLURM_JOBID")
     # System info
     sep = "=" * 20
     logger.info(f"{sep} Machine Information {sep}")
@@ -333,6 +334,8 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
     logger.info(f"Is pipeline execution in SLURM?: {bool(slurm_id)}")
     logger.info(f"SLURM ID: {slurm_id}")
+    logger.info(f"SLURM GPUs: {os.environ['SLURM_JOB_GPUS']}")
+    logger.info(f"SLURM CPUs: {os.environ['SLURM_JOB_CPUS_PER_NODE']}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()

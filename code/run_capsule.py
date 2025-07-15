@@ -195,8 +195,6 @@ def run():
         if not len(acquisition):
             raise ValueError(f"Please, provide a valid acquisition!")
 
-        print("Acquisition: ", acquisition)
-
         # run detection
         proposal_df = smartspim_cell_detection(**smartspim_config)
 

@@ -240,7 +240,7 @@ def get_cpu_limit():
 
     # Trying to get CPU cores from SLURM
     slurm_cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
-    print("SLURM CPUs ", slurm_cpus)
+
     # Total cpus in node SLURM_CPUS_ON_NODE
     if slurm_cpus:
         return slurm_cpus
@@ -334,8 +334,9 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
     logger.info(f"Is pipeline execution in SLURM?: {bool(slurm_id)}")
     logger.info(f"SLURM ID: {slurm_id}")
-    logger.info(f"SLURM GPUs: {os.environ['SLURM_JOB_GPUS']}")
-    logger.info(f"SLURM CPUs: {os.environ['SLURM_JOB_CPUS_PER_NODE']}")
+    logger.info(f"SLURM GPUs: {os.environ.get('SLURM_JOB_GPUS')}")
+    logger.info(f"SLURM CPUs: {os.environ.get('SLURM_JOB_CPUS_PER_NODE')}")
+    logger.info(f"SLURM variables {[( k, v ) for k, v in os.environ.items() if 'SLURM' in k]}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()

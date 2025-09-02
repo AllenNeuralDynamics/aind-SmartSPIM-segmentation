@@ -568,7 +568,6 @@ def smartspim_cell_detection(
     logger.info(f"Number of workers processing data: {exec_n_workers}")
 
     with cupy.cuda.Device(device=device) as cupy_device:
-
         workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
             num_blocks=available_cpus,
             block_shape=tuple(

@@ -203,8 +203,14 @@ def run():
 
         dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
         res = {}
-        for axis in pipeline_config["stitching"]["resolution"]:
-            res[axis["axis_name"]] = axis["resolution"]
+
+        axis_names = [axis["name"] for axis in acquisition["axes"]]
+        scales = [
+            float(scale)
+            for scale in acquisition["tiles"][0]["coordinate_transformations"][1]["scale"]
+        ]
+        for name, scale in zip(axis_names, scales[::-1]):
+            res[name] = scale
 
         ng_config = {
             "base_url": "https://neuroglancer-demo.appspot.com/#!",

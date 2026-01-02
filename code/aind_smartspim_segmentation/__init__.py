@@ -1,6 +1,6 @@
 """Init file for cell segmentation"""
 
-__version__ = "0.0.9"
+__version__ = "1.0.2"
 __authors__ = ["Nicholas Lusk", "Camilo Laiton"]
 __author_emails__ = [
     "nicholas.lusk@alleninstitute.org",
@@ -16,4 +16,4 @@ __maintainer_emails__ = [
 ]
 __title__ = "aind-SmartSPIM-segmentation"
 __status__ = "Production"  # 'Production', 'Beta'
-__pipeline_version__ = "3.0.0"
+__pipeline_version__ = "4.0.1"

@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aind_smartspim_segmentation"
-description = "Segments smartspim datasets using a modified version of cellfinder."
+description = "Identifies cell proposals from SmartSPIM datasets."
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 authors = [
     {name = "Allen Institute for Neural Dynamics"}
 ]
@@ -17,15 +17,14 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'dask==2023.2.0',
-    'natsort==8.2.0',
-    'argschema==3.0.4',
-    'astropy==5.2.1',
-    'photutils==1.6.0',
-    'imlib==0.1.3',
-    'zarr==2.13.6',
-    'aind-data-schema==0.12.5',
-    'cellfinder-core@git+https://github.com/camilolaiton/cellfinder-core.git@feature/lazy_reader'
+    'aind-large-scale-prediction @ git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@py38-compatible',    
+    'numpy==1.26.4',
+    'scikit-image==0.22.0',
+    'matplotlib==3.8.2',
+    'scipy==1.10.1',
+    'cupy-cuda11x==13.3.0',
+    'neuroglancer==2.40.1',
+    'aind-data-schema==1.2.0'
 ]
 
 [project.optional-dependencies]
@@ -41,7 +40,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["code/src"]
+where = ["code"]
 
 [tool.setuptools.dynamic]
 version = {attr = "aind_smartspim_segmentation.__version__"}
@@ -69,7 +68,7 @@ exclude = '''
 
 [tool.coverage.run]
 omit = ["*__init__*"]
-source = ["aind_smartspim_segmentation", "cellfinder_core", "tests"]
+source = ["aind_smartspim_segmentation", "tests"]
 
 [tool.coverage.report]
 exclude_lines = ["if __name__ == .__main__.:"]

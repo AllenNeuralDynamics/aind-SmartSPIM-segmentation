@@ -1,13 +1,13 @@
 metadata_version: 1
-name: aind-smartspim-cell-segmentation-0.0.9
+name: aind-smartspim-cell-segmentation-1.0.2
 description: A tool for automated segmentation of Cells or Nuclei from wholebrain
   lightsheet image volumes
 tags:
 - SmartSPIM
 authors:
-- name: Nicholas Lusk
-  affiliations:
-  - name: Allen Institute of Brain Science
 - name: Camilo Laiton
   affiliations:
   - name: Allen Institute for Neural Dynamics
+- name: Nicholas Lusk
+  affiliations:
+  - name: Allen Institute of Brain Science

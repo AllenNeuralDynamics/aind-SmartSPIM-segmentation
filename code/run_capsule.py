@@ -1,18 +1,21 @@
 """
-Main file to execute the smartspim segmentation
-in code ocean
+Scripts that runs the Code Ocean capsule
 """
 
+import json
+import logging
 import os
 import shutil
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-from aind_smartspim_segmentation import segmentation
-from aind_smartspim_segmentation.params import get_yaml
+import yaml
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
+from aind_smartspim_segmentation.detect import smartspim_cell_detection
+from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
 from aind_smartspim_segmentation.utils import utils
-import shutil
+
 
 def get_data_config(
     data_folder: str,
@@ -48,8 +51,12 @@ def get_data_config(
     # Returning first smartspim dataset found
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
-
+    print(
+        glob(f"{data_folder}/{processing_manifest_path}"),
+        f"{data_folder}/{processing_manifest_path}",
+    )
     processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+
     derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
 
@@ -64,44 +71,29 @@ def get_data_config(
     return derivatives_dict, smartspim_dataset
 
 
-def set_up_pipeline_parameters(pipeline_config: dict, default_config: dict):
+def get_yaml(yaml_path: PathLike):
     """
-    Sets up smartspim stitching parameters that come from the
-    pipeline configuration
+    Gets the default configuration from a YAML file
 
     Parameters
-    -----------
-    smartspim_dataset: str
-        String with the smartspim dataset name
-
-    pipeline_config: dict
-        Dictionary that comes with the parameters
-        for the pipeline described in the
-        processing_manifest.json
-
-    default_config: dict
-        Dictionary that has all the default
-        parameters to execute this capsule with
-        smartspim data
+    --------------
+    filename: str
+        Path where the YAML is located
 
     Returns
-    -----------
-    Dict
-        Dictionary with the combined parameters
+    --------------
+    dict
+        Dictionary with the yaml configuration
     """
 
-    default_config["input_channel"] = f"{pipeline_config['segmentation']['channel']}.zarr"
-    default_config["channel"] = pipeline_config["segmentation"]["channel"]
-    default_config["input_scale"] = pipeline_config["segmentation"]["input_scale"]
-    default_config["chunk_size"] = 128
-    default_config["cellfinder_params"]["start_plane"] = int(
-        pipeline_config["segmentation"]["signal_start"]
-    )
-    default_config["cellfinder_params"]["end_plane"] = int(
-        pipeline_config["segmentation"]["signal_end"]
-    )
+    config = None
+    try:
+        with open(yaml_path, "r") as stream:
+            config = yaml.safe_load(stream)
+    except Exception as error:
+        raise error
 
-    return default_config
+    return config
 
 
 def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
@@ -133,14 +125,12 @@ def validate_capsule_inputs(input_elements: List[str]) -> List[str]:
 
 def run():
     """
-    Main function to execute the smartspim segmentation
-    in code ocean
+    Run function
     """
 
     # Absolute paths of common Code Ocean folders
     data_folder = os.path.abspath("../data")
     results_folder = os.path.abspath("../results")
-    scratch_folder = os.path.abspath("../scratch")
 
     # It is assumed that these files
     # will be in the data folder
@@ -166,33 +156,79 @@ def run():
     # the channels. If the channel key does not exist, it means
     # there are no segmentation channels splitted
     if channel_to_process is not None:
-
         # get default configs
-        default_config = get_yaml(
-            os.path.abspath("aind_smartspim_segmentation/params/default_segment_config.yaml")
+        smartspim_config = get_yaml(
+            os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
+        )
+        smartspim_config["axis_pad"] = int(
+            1.6
+            * max(
+                max(smartspim_config["spot_parameters"]["sigma_zyx"][1:]),
+                smartspim_config["spot_parameters"]["sigma_zyx"][0],
+            )
+            * 5
         )
 
-        # add paths to default_config
-        default_config["input_data"] = os.path.abspath(pipeline_config["segmentation"]["input_data"])
-        print("Files in path: ", os.listdir(default_config["input_data"]))
-
-        default_config["save_path"] = f"{results_folder}/cell_{channel_to_process}"
-        default_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
-
-        print("Initial cell segmentation config: ", default_config)
-
-        # combine configs
-        smartspim_config = set_up_pipeline_parameters(
-            pipeline_config=pipeline_config, default_config=default_config
+        # add paths to smartspim_config
+        smartspim_config["dataset_path"] = os.path.abspath(
+            f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}.zarr"
         )
+
+        print("Files in path: ", os.listdir(smartspim_config["dataset_path"]))
+
+        smartspim_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
+        smartspim_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
+
+        utils.create_folder(dest_dir=str(smartspim_config["metadata_path"]), verbose=True)
+
+        print("Initial cell detection config: ", smartspim_config)
 
         smartspim_config["name"] = smartspim_dataset_name
 
         print("Final cell segmentation config: ", smartspim_config)
 
-        segmentation.main(
-            intermediate_segmented_folder=Path(scratch_folder),
-            smartspim_config=smartspim_config,
+        logger = utils.create_logger(output_log_path=str(smartspim_config["metadata_path"]))
+        smartspim_config["logger"] = logger
+
+        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+
+        if not len(acquisition):
+            raise ValueError(f"Please, provide a valid acquisition!")
+
+        # run detection
+        proposal_df = smartspim_cell_detection(**smartspim_config)
+
+        # create nueroglancer link
+        smartspim_config["channel"] = channel_to_process
+
+        dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
+        res = {}
+
+        axis_names = [axis["name"] for axis in acquisition["axes"]]
+        scales = [
+            float(scale)
+            for scale in acquisition["tiles"][0]["coordinate_transformations"][1]["scale"]
+        ]
+        for name, scale in zip(axis_names, scales[::-1]):
+            res[name] = scale
+
+        ng_config = {
+            "base_url": "https://neuroglancer-demo.appspot.com/#!",
+            "crossSectionScale": 15,
+            "projectionScale": 16384,
+            "orientation": acquisition,
+            "dimensions": {
+                "z": [res["Z"] * 10**-6, "m"],
+                "y": [res["Y"] * 10**-6, "m"],
+                "x": [res["X"] * 10**-6, "m"],
+                "t": [0.001, "s"],
+            },
+            "rank": 3,
+            "gpuMemoryLimit": 1500000000,
+        }
+
+        ng_utils.generate_neuroglancer_link(
+            proposal_df, ng_config, smartspim_config, dynamic_range, logger
         )
 
     else:
@@ -201,22 +237,6 @@ def run():
             filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
             dictionary=pipeline_config,
         )
-
-        # For post-processing pipeline
-        post_process_seg = Path(data_folder).joinpath('image_cell_segmentation')
-
-        if post_process_seg.exists():
-            for cell_folder in post_process_seg.glob("cell*"):
-                # Proposals added after version 3.0.1
-                cell_folder_name = cell_folder.stem
-                if cell_folder.joinpath('proposals').exists():
-                    cell_folder = cell_folder.joinpath('proposals')
-
-                output_path = results_folder / cell_folder_name
-                shutil.copy(
-                    str(cell_folder),
-                    output_path
-                )
 
 
 if __name__ == "__main__":

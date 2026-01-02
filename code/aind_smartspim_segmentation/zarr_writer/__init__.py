@@ -1,3 +1,0 @@
-"""
-SmartSPIM Zarr writer
-"""

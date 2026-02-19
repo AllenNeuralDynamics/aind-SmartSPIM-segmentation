@@ -45,10 +45,9 @@ from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_
 from .utils import utils
 
 
-def calculate_mask_cpu(image: ArrayLike) -> Tuple[np.ndarray, float]:
+def calculate_mask(image: ArrayLike) -> Tuple[np.ndarray, float]:
     """
-    Creates a binary mask using max entropy (triangle) method on CPU.
-    CPU version to avoid GPU memory issues during mask creation.
+    Creates a binary mask using max entropy (triangle) method.
     
     Parameters
     ----------
@@ -131,7 +130,6 @@ def create_downsampled_mask(
 ) -> np.ndarray:
     """
     Creates a downsampled segmentation mask from the full volume.
-    Uses CPU to avoid GPU memory issues.
     
     Parameters
     ----------
@@ -158,7 +156,7 @@ def create_downsampled_mask(
     if logger:
         logger.info(f"Loaded downsampled volume: {downsampled_volume.shape}")
     
-    mask, mask_coverage = calculate_mask_cpu(downsampled_volume)
+    mask, mask_coverage = calculate_mask(downsampled_volume)
     
     if logger:
         logger.info(f"Downsampled mask shape: {mask.shape}, "
@@ -818,7 +816,7 @@ def smartspim_cell_detection(
         logger.info("Creating tissue filtering mask...")
         logger.info("="*70)
         
-        # Create downsampled mask (CPU-based to avoid GPU memory issues)
+        # Create downsampled mask
         downsampled_mask = create_downsampled_mask(
             zarr_path=dataset_path,
             downsample_factor=downsample_factor,

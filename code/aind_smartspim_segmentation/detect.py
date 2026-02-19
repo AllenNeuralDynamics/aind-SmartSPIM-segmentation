@@ -1,5 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Large-scale puncta detection using single GPU
+Created on Fri Dec 26 00:33:10 2025
+
+@author: nicholas.lusk
 """
 
 import logging
@@ -7,11 +11,12 @@ import multiprocessing
 import os
 import warnings
 
-# from functools import partial
 from time import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Set, Any
 
 import cupy
+import cupyx.scipy.ndimage as ndi
+import dask.array as da
 import numpy as np
 import pandas as pd
 import psutil
@@ -26,26 +31,331 @@ from aind_large_scale_prediction.generator.utils import (
 from aind_large_scale_prediction.io import ImageReaderFactory
 from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 from pathos.pools import _ProcessPool
-from scipy.ndimage import gaussian_filter
-from scipy.signal import argrelmin
+from scipy.ndimage import (
+    gaussian_filter, 
+    binary_opening, 
+    binary_fill_holes, 
+    binary_closing, 
+    label,
+)
+
 
 from .__init__ import __maintainers__, __pipeline_version__, __version__
-
-# from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
 from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_spot_detection
 from .utils import utils
 
 
+def calculate_mask_cpu(image: ArrayLike) -> Tuple[np.ndarray, float]:
+    """
+    Creates a binary mask using max entropy (triangle) method on CPU.
+    CPU version to avoid GPU memory issues during mask creation.
+    
+    Parameters
+    ----------
+    image: ArrayLike
+        Input volume
+    
+    Returns
+    -------
+    np.ndarray
+        Binary mask (uint8)
+    float
+        Percent of volume covered by mask
+    """
+    
+    vol = np.asarray(image.squeeze().astype(np.float32))
+    smoothed = gaussian_filter(vol, sigma=1.0)
+    
+    non_zero = smoothed[smoothed > 0]
+    
+    # Maximum entropy method
+    hist, bin_edges = np.histogram(non_zero, bins=256)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # Find peak of histogram (background peak)
+    peak_idx = int(np.argmax(hist))
+    
+    # Find last significant bin (tissue tail)
+    cumsum = np.cumsum(hist[::-1])[::-1]
+    last_idx = int(np.where(cumsum > cumsum[0] * 0.01)[0][-1])
+    
+    # Triangle method: draw line from peak to last bin, find max distance
+    if last_idx > peak_idx:
+        x1, y1 = peak_idx, float(hist[peak_idx])
+        x2, y2 = last_idx, float(hist[last_idx])
+        
+        # Distance from line to histogram (vectorized)
+        indices = np.arange(peak_idx, last_idx)
+        hist_segment = hist[peak_idx:last_idx]
+        
+        # Vectorized distance calculation
+        numerator = np.abs((y2-y1)*(indices-x1) - (x2-x1)*(hist_segment-y1))
+        denominator = np.sqrt((y2-y1)**2 + (x2-x1)**2)
+        distances = numerator / denominator
+        
+        threshold_idx = peak_idx + int(np.argmax(distances))
+        threshold = float(bin_centers[threshold_idx])
+    else:
+        # Fallback to 70th percentile if distribution is unusual
+        threshold = float(np.percentile(non_zero, 70))
+    
+    binary = vol > threshold
+    
+    struct_3d = np.ones((7, 7, 7), dtype=bool)
+    opened = binary_opening(binary, structure=struct_3d, iterations=3)
+    filled = binary_fill_holes(opened)
+    
+    # Largest component
+    labeled, num_features = label(filled)
+    if num_features > 0:
+        component_sizes = np.bincount(labeled.ravel())
+        component_sizes[0] = 0
+        largest_idx = np.argmax(component_sizes)
+        mask = (labeled == largest_idx)
+    else:
+        mask = filled
+    
+    # Smooth
+    mask = binary_closing(mask, structure=np.ones((3, 3, 3), dtype=bool))
+    mask_cpu = mask.astype(np.uint8)
+    
+    coverage = np.sum(mask_cpu > 0) / binary.size * 100
+   
+    return mask_cpu, coverage
+
+
+def create_downsampled_mask(
+    zarr_path: PathLike,
+    downsample_factor: int,
+    logger: logging.Logger = None,
+) -> np.ndarray:
+    """
+    Creates a downsampled segmentation mask from the full volume.
+    Uses CPU to avoid GPU memory issues.
+    
+    Parameters
+    ----------
+    zarr_path: PathLike
+        Path to the zarr dataset
+    downsample_factor: int
+        Zarr level to use for mask creation
+    logger: logging.Logger
+        Logger object
+    
+    Returns
+    -------
+    np.ndarray
+        Downsampled binary mask (uint8)
+    """
+    if logger:
+        logger.info(f"Creating downsampled mask with Zarr level {downsample_factor}")
+    
+    downsampled_volume = da.from_zarr(zarr_path, str(downsample_factor)).squeeze()
+    
+    if isinstance(downsampled_volume, da.Array):
+        downsampled_volume = downsampled_volume.compute()
+    
+    if logger:
+        logger.info(f"Loaded downsampled volume: {downsampled_volume.shape}")
+    
+    mask, mask_coverage = calculate_mask_cpu(downsampled_volume)
+    
+    if logger:
+        logger.info(f"Downsampled mask shape: {mask.shape}, "
+                   f"coverage: {mask_coverage:.2f}%")
+    
+    return mask
+
+
+def compute_block_tissue_map(
+    downsampled_mask: np.ndarray,
+    original_volume_shape: Tuple[int, ...],
+    super_chunk_size: Tuple[int, ...],
+    prediction_chunksize: Tuple[int, ...],
+    overlap_chunksize: Tuple[int, ...],
+    min_coverage_percent: float = 0.0,
+    logger: logging.Logger = None,
+) -> Dict[str, Any]:
+    """
+    Pre-compute which batches have tissue by scanning the mask once.
+    
+    Returns a lookup table for fast filtering during iteration.
+    
+    Parameters
+    ----------
+    downsampled_mask : np.ndarray
+        Binary mask from create_downsampled_mask
+    original_volume_shape : Tuple[int, ...]
+        Original volume shape (Z, Y, X)
+    super_chunk_size : Tuple[int, ...]
+        Super chunk dimensions
+    prediction_chunksize : Tuple[int, ...]
+        Batch prediction chunk size
+    overlap_chunksize : Tuple[int, ...]
+        Overlap padding
+    min_coverage_percent : float
+        Minimum tissue coverage to process block
+    logger : logging.Logger
+        For progress logging
+        
+    Returns
+    -------
+    Dict with tissue block information
+    """
+    
+    if logger:
+        logger.info("Pre-computing tissue block map...")
+        logger.info(f"  Mask shape: {downsampled_mask.shape}")
+        logger.info(f"  Volume shape: {original_volume_shape}")
+        logger.info(f"  Super chunk size: {super_chunk_size}")
+        logger.info(f"  Prediction chunk size: {prediction_chunksize}")
+        logger.info(f"  Min coverage: {min_coverage_percent}%")
+    
+    # Calculate downsample factors
+    downsample_factors = np.array(original_volume_shape) / np.array(downsampled_mask.shape)
+    
+    # Effective batch size (prediction + overlap)
+    batch_size = tuple(np.array(prediction_chunksize) + np.array(overlap_chunksize))
+    
+    # Set to store batch identifiers with tissue
+    batches_with_tissue = set()
+    
+    # Count totals
+    total_batches_scanned = 0
+    
+    # Iterate through all possible batch positions
+    for sz in range(0, original_volume_shape[0], prediction_chunksize[0]):
+        for sy in range(0, original_volume_shape[1], prediction_chunksize[1]):
+            for sx in range(0, original_volume_shape[2], prediction_chunksize[2]):
+                total_batches_scanned += 1
+                
+                # Batch bounds in global coordinates
+                batch_start = (sz, sy, sx)
+                batch_end = (
+                    min(sz + batch_size[0], original_volume_shape[0]),
+                    min(sy + batch_size[1], original_volume_shape[1]),
+                    min(sx + batch_size[2], original_volume_shape[2])
+                )
+                
+                # Skip if entirely outside volume
+                if (batch_start[0] >= original_volume_shape[0] or
+                    batch_start[1] >= original_volume_shape[1] or
+                    batch_start[2] >= original_volume_shape[2]):
+                    continue
+                
+                # Map to downsampled coordinates
+                ds_start = tuple(
+                    int(np.floor(batch_start[i] / downsample_factors[i]))
+                    for i in range(3)
+                )
+                ds_end = tuple(
+                    int(np.ceil(batch_end[i] / downsample_factors[i]))
+                    for i in range(3)
+                )
+                
+                # Clamp to mask bounds
+                ds_start = tuple(
+                    max(0, min(ds_start[i], downsampled_mask.shape[i]))
+                    for i in range(3)
+                )
+                ds_end = tuple(
+                    max(0, min(ds_end[i], downsampled_mask.shape[i]))
+                    for i in range(3)
+                )
+                
+                # Extract mask region
+                mask_region = downsampled_mask[
+                    ds_start[0]:ds_end[0],
+                    ds_start[1]:ds_end[1],
+                    ds_start[2]:ds_end[2]
+                ]
+                
+                if mask_region.size == 0:
+                    continue
+                
+                tissue_voxels = np.sum(mask_region > 0)
+                
+                if min_coverage_percent == 0.0:
+                    # Special case: skip only completely empty blocks
+                    has_tissue = (tissue_voxels > 0)
+                else:
+                    # Use percentage threshold
+                    coverage_percent = (tissue_voxels / mask_region.size) * 100
+                    has_tissue = (coverage_percent >= min_coverage_percent)
+                
+                if has_tissue:
+                    batches_with_tissue.add(batch_start)
+                
+                # Log progress every 10000 batches
+                if total_batches_scanned % 10000 == 0 and logger:
+                    logger.info(f"  Scanned {total_batches_scanned} batches, "
+                              f"found {len(batches_with_tissue)} with tissue")
+    
+    tissue_map = {
+        'batches_with_tissue': batches_with_tissue,
+        'total_batches_scanned': total_batches_scanned,
+        'tissue_batches': len(batches_with_tissue),
+    }
+    
+    if logger:
+        skip_rate = (1 - len(batches_with_tissue) / max(1, total_batches_scanned)) * 100
+        speedup = total_batches_scanned / max(1, len(batches_with_tissue))
+        
+        logger.info("="*70)
+        logger.info("Tissue block map computed:")
+        logger.info(f"  Total batches scanned: {total_batches_scanned}")
+        logger.info(f"  Batches with tissue: {len(batches_with_tissue)}")
+        logger.info(f"  Batches to skip: {total_batches_scanned - len(batches_with_tissue)}")
+        logger.info(f"  Skip rate: {skip_rate:.1f}%")
+        logger.info(f"  Expected speedup: {speedup:.2f}x")
+        logger.info("="*70)
+    
+    return tissue_map
+
+
+def batch_identifier_from_sample(
+    batch_super_chunk: Tuple[slice, ...],
+    batch_internal_slice: Tuple[slice, ...]
+) -> Tuple[int, int, int]:
+    """
+    Extract batch global position as identifier for lookup.
+    
+    Returns
+    -------
+    Tuple[int, int, int]
+        (z_start, y_start, x_start) in global coordinates
+    """
+    # Get super chunk start
+    if isinstance(batch_super_chunk[0], slice):
+        super_start_z = batch_super_chunk[0].start
+        super_start_y = batch_super_chunk[1].start
+        super_start_x = batch_super_chunk[2].start
+    else:
+        super_start_z, super_start_y, super_start_x = batch_super_chunk[:3]
+    
+    # Get internal start
+    if isinstance(batch_internal_slice[0], slice):
+        internal_start_z = batch_internal_slice[0].start
+        internal_start_y = batch_internal_slice[1].start
+        internal_start_x = batch_internal_slice[2].start
+    else:
+        raise ValueError("batch_internal_slice should contain slices")
+    
+    # Global position
+    return (
+        super_start_z + internal_start_z,
+        super_start_y + internal_start_y,
+        super_start_x + internal_start_x
+    )
+
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     """
-    Applies the mask to the current data. This
-    should come in the second channel.
+    Applies the mask to the current data.
 
     Parameters
     ----------
     data: ArrayLike
         Data to mask.
-
     mask: ArrayLike
         Segmentation mask.
 
@@ -63,7 +373,6 @@ def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     mask[mask > 0] = 1
     if isinstance(mask, torch.Tensor):
         mask = mask.to(torch.uint8)
-
     else:
         mask = mask.astype(np.uint8)
 
@@ -71,7 +380,6 @@ def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
 
     if isinstance(data, torch.Tensor):
         data = data.to(orig_dtype)
-
     else:
         data = data.astype(orig_dtype)
 
@@ -80,20 +388,14 @@ def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
 
 def remove_points_in_pad_area(points: ArrayLike, unpadded_slices: Tuple[slice]) -> ArrayLike:
     """
-    Removes points in padding area. The padding is provided
-    by the scheduler as well as the unpadded slices which
-    will be used to remove points in those areas.
+    Removes points in padding area.
 
     Parameters
     ----------
     points: ArrayLike
-        3D points in the chunk of data. When masks are provided,
-        points will be 4D with an extra dimension for the mask id
-        which is not modified.
-
+        3D points in the chunk of data.
     unpadded_slices: Tuple[slice]
-        Slices that point to the non-overlapping area between chunks
-        of data.
+        Slices that point to the non-overlapping area between chunks.
 
     Returns
     -------
@@ -101,65 +403,16 @@ def remove_points_in_pad_area(points: ArrayLike, unpadded_slices: Tuple[slice]) 
         Points within the non-overlapping area.
     """
 
-    # Validating seeds are within block boundaries
     unpadded_points = points[
-        (points[:, 0] >= unpadded_slices[0].start)  # within Z boundaries
+        (points[:, 0] >= unpadded_slices[0].start)
         & (points[:, 0] <= unpadded_slices[0].stop)
-        & (points[:, 1] >= unpadded_slices[1].start)  # Within Y boundaries
+        & (points[:, 1] >= unpadded_slices[1].start)
         & (points[:, 1] <= unpadded_slices[1].stop)
-        & (points[:, 2] >= unpadded_slices[2].start)  # Within X boundaries
+        & (points[:, 2] >= unpadded_slices[2].start)
         & (points[:, 2] <= unpadded_slices[2].stop)
     ]
 
     return unpadded_points
-
-
-def validate_chunk(data: ArrayLike) -> bool:
-    """
-    Function that validates if a chunk should be processed or not.
-
-    Parameters
-    ----------
-    data: ArrayLike
-        Block of data that needs to be processed.
-
-    Returns
-    -------
-        bool: Boolean that determines if a block needs to be processed or not.
-
-    .. deprecated:: 0.0.7
-       There will be a segmentation mask for the whole brain
-       coming from the SmartSPIM pipeline.
-    """
-    warnings.warn(
-        "validate_chunk() is deprecated since version 0.0.7 and will be " "removed in 0.0.8.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-    # Apply Gaussian smoothing to reduce noise
-    smoothed_img = gaussian_filter(data, sigma=5.0, mode="constant", cval=0)
-
-    # Compute histogram of the image
-    """
-    pixel_values, bin_edges = np.histogram(
-        smoothed_img.ravel(), bins=256, range=(0, 2**16), density=True
-    )
-    """
-
-    pixel_values, bin_edges = np.histogram(
-        smoothed_img.astype("uint16"), bins=2**16, range=(0, 2**16), density=True
-    )
-
-    threshold_bin = 100
-    local_mins = argrelmin(pixel_values, order=10)[0]  # 10)[0]
-    if local_mins.size > 0:
-        threshold_bin = local_mins[0]
-
-    # Binarize the image using the threshold
-    threshold = bin_edges[threshold_bin]
-
-    return np.any(smoothed_img >= threshold)
 
 
 def execute_worker(
@@ -172,40 +425,28 @@ def execute_worker(
     logger: logging.Logger,
 ) -> np.array:
     """
-    Function that executes each worker. It takes
-    the combined gradients and follows the flows.
+    Function that executes each worker for spot detection.
 
     Parameters
     ----------
     data: ArrayLike
         Data to process.
-
     batch_super_chunk: Tuple[slice]
         Slices of the super chunk loaded in shared memory.
-
     batch_internal_slice: Tuple[slice]
-        Internal slice of the current chunk of data. This
-        is a local coordinate system based on the super chunk.
-
+        Internal slice of the current chunk of data.
     spot_parameters: Dict
         Spot detection parameters.
-
     logger: logging.Logger
         Logging object
 
     Returns
     -------
-    Tuple[ArrayLike, ArrayLike]
+    np.array
         Array with the global location of the identified points.
     """
     global_worker_spots = None
     curr_pid = os.getpid()
-    """
-    process_chunk = validate_chunk(data)
-
-    if not process_chunk:
-        return global_worker_spots
-    """
 
     mask = None
     # (Batch, channels, Z, Y, X)
@@ -225,7 +466,7 @@ def execute_worker(
         )
         logger.info(message)
 
-        # Making sure CuPy it's running in the correct device
+        # Spot detection
         spots = traditional_3D_spot_detection(
             data_block=curr_block,
             background_percentage=spot_parameters["background_percentage"],
@@ -243,7 +484,8 @@ def execute_worker(
         if spots is None:
             logger.info(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
 
-        else:
+
+        if spots is not None and len(spots) > 0:
             # Recover global position of internal chunk
             (
                 global_coord_pos,
@@ -260,13 +502,13 @@ def execute_worker(
                 overlap_prediction_chunksize=overlap_prediction_chunksize[-3:],
                 dataset_shape=dataset_shape[-3:],  # zarr_dataset.lazy_data.shape,
             )
-
+            
             if mask is not None:
                 # Getting spots IDs, adding mask ID to the spot as extra value at the end
                 mask = torch.squeeze(mask)
                 mask_ids = np.expand_dims(mask[spots[:, 0], spots[:, 1], spots[:, 2]], axis=0)
                 spots = np.append(spots.T, mask_ids, axis=0).T
-
+                
             curr_spots = spots.copy().astype(np.float32)
             # Converting to global coordinates, only to ZYX position, leaving mask ID if exists
             curr_spots[:, :3] = np.array(global_coord_positions_start)[:, -3:] + np.array(
@@ -288,7 +530,7 @@ def execute_worker(
             # Adding spots to the worker batch
             if global_worker_spots is None:
                 global_worker_spots = curr_spots.copy()
-
+                
             else:
                 global_worker_spots = np.append(
                     global_worker_spots,
@@ -345,7 +587,6 @@ def has_enough_gpu_memory(
 
     return total_required_memory <= target_memory, float(total_memory)
 
-
 def smartspim_cell_detection(
     dataset_path: PathLike,
     name: str,
@@ -361,7 +602,10 @@ def smartspim_cell_detection(
     logger: logging.Logger,
     super_chunksize: Optional[Tuple[int, ...]] = None,
     segmentation_mask_path: Optional[PathLike] = None,
-) -> str:
+    create_mask_from_downsampled: bool = False,
+    downsample_factor: Optional[int] = None,
+    min_tissue_coverage: float = 5.0,
+) -> pd.DataFrame:
     """
     Chunked puncta detection
 
@@ -407,6 +651,16 @@ def smartspim_cell_detection(
         Path where the segmentation mask is stored. It could
         be a local path or in a S3 path.
         Default None
+        
+    create_mask_from_downsampled : bool
+        If True, create a mask from downsampled data for filtering
+    
+    downsample_factor : Optional[int]
+        Zarr level to use for mask creation (e.g., 3)
+        
+    min_tissue_coverage : float
+        Minimum % of tissue in a block to process it (default 5%)
+        
 
     Returns
     -------
@@ -484,6 +738,16 @@ def smartspim_cell_detection(
             .create(data_path=dataset_path, parse_path=False, multiscale=multiscale)
             .as_dask_array()
         )
+        
+    
+    # Store original shape
+    original_lazy_data_shape = lazy_data.shape
+    if len(original_lazy_data_shape) == 5:
+        original_volume_shape = original_lazy_data_shape[-3:]
+    elif len(original_lazy_data_shape) == 3:
+        original_volume_shape = original_lazy_data_shape
+    else:
+        raise ValueError(f"Unexpected shape: {original_lazy_data_shape}")
 
     image_metadata = (
         ImageReaderFactory()
@@ -492,15 +756,9 @@ def smartspim_cell_detection(
     )
 
     logger.info(f"Full image metadata: {image_metadata}")
-
+    
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
-
-    # voxel_size = [
-    #     image_metadata["axes"]["z"]["scale"],
-    #     image_metadata["axes"]["y"]["scale"],
-    #     image_metadata["axes"]["x"]["scale"],
-    # ]
-
+    
     logger.info(f"Filtered Image metadata: {image_metadata}")
     end_date_time = time()
 
@@ -524,12 +782,12 @@ def smartspim_cell_detection(
         lazy_data=lazy_data,
         target_size_mb=target_size_mb,
         prediction_chunksize=tuple(prediction_chunksize),
-        overlap_prediction_chunksize=overlap_prediction_chunksize,
+        overlap_prediction_chunksize=tuple([axis_pad] * 3),
         n_workers=n_workers,
         batch_size=batch_size,
         dtype=np.float32,  # Allowed data type to process with pytorch cuda
         super_chunksize=super_chunksize,
-        lazy_callback_fn=None,  # partial_lazy_deskewing,
+        lazy_callback_fn=None, # partial_lazy_deskewing,
         logger=logger,
         device=device,
         pin_memory=pin_memory,
@@ -538,6 +796,46 @@ def smartspim_cell_detection(
         locked_array=False,
     )
 
+    overlap_prediction_chunksize = tuple([axis_pad] * 3)
+    
+    # Get actual super chunk size
+    if hasattr(zarr_dataset, 'super_chunk_size'):
+        actual_super_chunk_size = zarr_dataset.super_chunk_size
+    else:
+        actual_super_chunk_size = super_chunksize or (1024, 1152, 512)
+    
+    logger.info(f"Super chunk size: {actual_super_chunk_size}")
+
+    tissue_map = None
+    
+    if create_mask_from_downsampled:
+        if downsample_factor is None:
+            raise ValueError(
+                "downsample_factor must be provided when create_mask_from_downsampled=True"
+            )
+        
+        logger.info("="*70)
+        logger.info("Creating tissue filtering mask...")
+        logger.info("="*70)
+        
+        # Create downsampled mask (CPU-based to avoid GPU memory issues)
+        downsampled_mask = create_downsampled_mask(
+            zarr_path=dataset_path,
+            downsample_factor=downsample_factor,
+            logger=logger,
+        )
+        
+        # Pre-compute which blocks have tissue
+        tissue_map = compute_block_tissue_map(
+            downsampled_mask=downsampled_mask,
+            original_volume_shape=original_volume_shape,
+            super_chunk_size=actual_super_chunk_size,
+            prediction_chunksize=prediction_chunksize,
+            overlap_chunksize=overlap_prediction_chunksize,
+            min_coverage_percent=min_tissue_coverage,
+            logger=logger,
+        )
+    
     message = (
         f"Running puncta detection in chunked data. Prediction chunksize: {prediction_chunksize}"
         f"- Overlap chunksize: {overlap_prediction_chunksize}"
@@ -547,32 +845,37 @@ def smartspim_cell_detection(
     start_time = time()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
-
+    
     samples_per_iter = n_workers * batch_size
     logger.info(f"Number of batches: {total_batches}")
+    
+    # Tracking statistics
+    batches_scanned = 0
+    batches_processed = 0
+    batches_skipped = 0
+    
+    if tissue_map:
+        logger.info(f"Will process {tissue_map['tissue_batches']} batches with tissue")
+        logger.info(f"Will skip ~{tissue_map['total_batches_scanned'] - tissue_map['tissue_batches']} empty batches")
+    
     spots_global_coordinate = None
 
-    # Setting exec workers to CO CPUs
+    # Setting exec workers to available CPUs
     exec_n_workers = available_cpus
 
     # Create a pool of processes
-    # pool = multiprocessing.Pool(processes=exec_n_workers)
     pool = _ProcessPool(exec_n_workers)
 
     # Variables for multiprocessing
     picked_blocks = []
     curr_picked_blocks = 0
 
-    output_csv = None
-
     logger.info(f"Number of workers processing data: {exec_n_workers}")
 
     with cupy.cuda.Device(device=device) as cupy_device:
         workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
             num_blocks=available_cpus,
-            block_shape=tuple(
-                np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)
-            ),
+            block_shape=tuple(np.array(prediction_chunksize) + np.array(overlap_prediction_chunksize)),
             dtype=np.float32,
             usage_fraction=0.8,
             cupy_device=cupy_device,
@@ -587,6 +890,20 @@ def smartspim_cell_detection(
 
         with cupy.cuda.Stream.null:
             for i, sample in enumerate(zarr_data_loader):
+                batches_scanned += 1
+                
+                if tissue_map is not None:
+                    batch_id = batch_identifier_from_sample(
+                        sample.batch_super_chunk[0],
+                        sample.batch_internal_slice
+                    )
+                    
+                    if batch_id not in tissue_map['batches_with_tissue']:
+                        batches_skipped += 1                        
+                        continue
+                
+                batches_processed += 1
+                
                 message = (
                     f"Batch {i}: {sample.batch_tensor.shape} - "
                     f"Pinned?: {sample.batch_tensor.is_pinned()} - "
@@ -594,19 +911,15 @@ def smartspim_cell_detection(
                 )
                 logger.info(message)
 
-                # start_spot_time = time()
-
-                picked_blocks.append(
-                    {
-                        "data": sample.batch_tensor,
-                        "batch_super_chunk": sample.batch_super_chunk[0],
-                        "batch_internal_slice": sample.batch_internal_slice,
-                        "overlap_prediction_chunksize": overlap_prediction_chunksize,
-                        "dataset_shape": zarr_dataset.lazy_data.shape,
-                        "spot_parameters": spot_parameters,
-                        "logger": logger,
-                    }
-                )
+                picked_blocks.append({
+                    "data": sample.batch_tensor,
+                    "batch_super_chunk": sample.batch_super_chunk[0],
+                    "batch_internal_slice": sample.batch_internal_slice,
+                    "overlap_prediction_chunksize": overlap_prediction_chunksize,
+                    "dataset_shape": zarr_dataset.lazy_data.shape,
+                    "spot_parameters": spot_parameters,
+                    "logger": logger,
+                })
                 curr_picked_blocks += 1
 
                 if curr_picked_blocks == exec_n_workers:
@@ -641,7 +954,7 @@ def smartspim_cell_detection(
                         # Adding picked spots to global list of spots
                         if spots_global_coordinate is None:
                             spots_global_coordinate = global_workers_spots.copy()
-
+                            
                         else:
                             spots_global_coordinate = np.append(
                                 spots_global_coordinate,
@@ -675,19 +988,19 @@ def smartspim_cell_detection(
             if worker_response is not None:
                 # Global coordinate points
                 global_workers_spots.append(worker_response.astype(np.float32))
-
+        
         # Setting variables back to init
         curr_picked_blocks = 0
         picked_blocks = []
-
+        
         # Concatenate worker spots
         if len(global_workers_spots):
             global_workers_spots = np.concatenate(global_workers_spots, axis=0, dtype=np.float32)
-
+            
             # Adding picked spots to global list of spots
             if spots_global_coordinate is None:
                 spots_global_coordinate = global_workers_spots.copy()
-
+                
             else:
                 spots_global_coordinate = np.append(
                     spots_global_coordinate,
@@ -697,8 +1010,22 @@ def smartspim_cell_detection(
 
     end_time = time()
 
+    if tissue_map:
+        logger.info("="*70)
+        logger.info("TISSUE FILTERING STATISTICS:")
+        logger.info(f"  Total batches scanned: {batches_scanned}")
+        logger.info(f"  Batches processed: {batches_processed}")
+        logger.info(f"  Batches skipped: {batches_skipped}")
+        if batches_scanned > 0:
+            skip_rate = (batches_skipped / batches_scanned) * 100
+            speedup = batches_scanned / max(1, batches_processed)
+            logger.info(f"  Skip rate: {skip_rate:.1f}%")
+            logger.info(f"  Actual speedup: {speedup:.2f}x")
+        logger.info("="*70)
+
     if spots_global_coordinate is None:
         logger.info("No spots found!")
+        spots_df = pd.DataFrame()
 
     else:
         spots_global_coordinate = spots_global_coordinate.astype(np.float32)
@@ -712,13 +1039,13 @@ def smartspim_cell_detection(
         end_final_prunning_time = time()
 
         message = (
-            f"Time taken for final prunning {end_final_prunning_time - start_final_prunning_time}"
+            f"Time taken for final pruning {end_final_prunning_time - start_final_prunning_time} "
             f"before: {len(spots_global_coordinate)} After: {len(spots_global_coordinate_prunned)}"
         )
         logger.info(message)
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
-
+        
         # Saving spots as numpy and csv
         # np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
 
@@ -741,9 +1068,9 @@ def smartspim_cell_detection(
         # Saving spots
         spots_df.to_csv(
             output_csv,
-            index=False,
+            index=False
         )
-
+        
         # Saving spots
         # proposal_df = pd.DataFrame(spots_global_coordinate_prunned[:, :3], columns = ['x', 'y', 'z'])
         # proposal_df.to_csv(
@@ -766,6 +1093,9 @@ def smartspim_cell_detection(
                     "multiscale": multiscale,
                     "spot_parameters": spot_parameters,
                     "segmentation_mask_path": segmentation_mask_path,
+                    "create_mask_from_downsampled": create_mask_from_downsampled,
+                    "downsample_factor": downsample_factor,
+                    "min_tissue_coverage": min_tissue_coverage,
                     "scheduler_params": {
                         "prediction_chunksize": prediction_chunksize,
                         "target_size_mb": target_size_mb,
@@ -786,7 +1116,7 @@ def smartspim_cell_detection(
             pipeline_version=__pipeline_version__,
         )
 
-    # Getting tracked resources and plotting image
+    # Stop resource tracking
     utils.stop_child_process(profile_process)
 
     if len(time_points):

@@ -76,6 +76,9 @@ def prune_blobs_optimized(blobs_array, distance: int, eps=0) -> cupy.ndarray:
     tree = spatial.cKDTree(blobs_array)
     pairs = np.array(list(tree.query_pairs(distance, eps=eps)))
 
+    if len(pairs) == 0:
+        return blobs_array, np.array([], dtype=int)
+
     i_indices, j_indices = zip(*pairs)
     i_indices = np.array(i_indices)
     j_indices = np.array(j_indices)

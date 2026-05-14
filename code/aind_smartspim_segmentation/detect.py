@@ -281,7 +281,7 @@ def execute_worker(
             message = (
                 f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx}"
                 f"- Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos}"
-                f"- upadded global coords: {unpadded_global_slice}"
+                f"- unpadded global coords: {unpadded_global_slice}"
             )
             logger.info(message)
 

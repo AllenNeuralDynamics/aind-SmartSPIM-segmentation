@@ -65,14 +65,14 @@ def volume_orientation(acquisition_params: dict):
     elif acquired == "LAI":
         orientation = [0.0, np.cos(np.pi / 4), -np.cos(np.pi / 4), 0.0]
     else:
-        raise ValueError("Acquisition orientation: {acquired} has unknown NG parameters")
+        raise ValueError(f"Acquisition orientation: {acquired} has unknown NG parameters")
 
     return orientation
 
 
-def calculate_dynamic_range(image_path: PathLike, percentile: 99, level: 3):
+def calculate_dynamic_range(image_path: PathLike, percentile: int = 99, level: int = 3):
     """
-    Calculates the default dynamic range for teh neuroglancer link
+    Calculates the default dynamic range for the neuroglancer link
     using a defined percentile from the downsampled zarr
 
     Parameters

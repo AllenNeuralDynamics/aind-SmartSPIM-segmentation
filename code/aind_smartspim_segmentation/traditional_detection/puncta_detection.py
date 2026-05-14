@@ -585,7 +585,7 @@ def traditional_3D_spot_detection(
         pruned_spots, _ = prune_blobs(initial_spots.get(), minYX + radius_confidence, eps=eps)
         prunning_end_time = time()
         if verbose:
-            logger.info(f"Prunning spots time: {prunning_end_time - prunning_start_time}")
+            logger.info(f"Pruning spots time: {prunning_end_time - prunning_start_time}")
 
         guassian_laplaced_img_memory = gaussian_laplaced_img.get()
 

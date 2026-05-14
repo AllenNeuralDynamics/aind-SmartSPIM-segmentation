@@ -11,7 +11,7 @@ from dask_image.ndinterp import affine_transform as dask_affine_transform
 from .._shared.types import ArrayLike
 
 
-def ceil_to_mulitple(x, base: int = 4):
+def ceil_to_multiple(x, base: int = 4):
     """rounds up to the nearest integer multiple of base
 
     Parameters
@@ -81,7 +81,7 @@ def get_output_dimensions(aff: np.ndarray, vol_or_shape):
     corners = get_transformed_corners(aff, vol_or_shape, zeroindex=True)
     # +1 to avoid fencepost error
     dims = np.max(corners, axis=0) - np.min(corners, axis=0) + 1
-    dims = ceil_to_mulitple(dims, 2)
+    dims = ceil_to_multiple(dims, 2)
     return dims[:3].astype(np.int32)
 
 

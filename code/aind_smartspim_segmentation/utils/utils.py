@@ -273,7 +273,7 @@ def get_memory_limit_bytes():
     memory_env = os.environ.get("CO_MEMORY")
     if memory_env:
         try:
-            return int(memory_env)  # Convert GB → bytes
+            return int(memory_env) * (1024**3)  # Convert GB → bytes
         except ValueError:
             pass  # Invalid format, fallback
 

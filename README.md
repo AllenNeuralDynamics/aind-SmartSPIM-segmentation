@@ -47,11 +47,31 @@ cell_Ex_XXX_Em_XXX/
 - **visualization/**: Includes assets for **Neuroglancer** visualization.
 - **cell\_likelihoods.csv**: Contains detected spots and associated metrics.
 
+## Module Overview
+
+| Module | Description |
+| ------ | ----------- |
+| `detect.py` | High-level cell detection orchestrator; entry point for pipeline runs |
+| `run_capsule.py` | Code Ocean capsule entry point; reads the processing manifest and calls `detect.py` |
+| `traditional_detection/puncta_detection.py` | CPU+GPU LoG-based spot detection, Gaussian fitting, blob pruning |
+| `traditional_detection/puncta_detection_optimized.py` | GPU-optimised variant using CuPy arrays |
+| `utils/utils.py` | General utilities: memory profiling, JSON I/O, resource graphs |
+| `utils/lazy_deskewing.py` | Lazy deskewing transforms for diSPIM acquisitions |
+| `utils/generate_precomputed_format.py` | Generates Neuroglancer precomputed point annotations |
+| `utils/neuroglancer_utils.py` | Neuroglancer link generation and dynamic range calculation |
+| `_shared/types.py` | Shared type aliases (`ArrayLike`, `PathLike`) |
+
 ## Features
 
 - **High-throughput** processing of whole-brain images
 - **Cloud-compatible** with S3 storage
 - **Neuroglancer integration** for visualization
+
+## Hardware Requirements
+
+- **GPU**: NVIDIA GPU with CUDA 11.x (Code Ocean) or CUDA 12.x (local/`Dockerfile_local`) required
+- **GPU RAM**: 16 GB recommended for typical SmartSPIM datasets
+- **System RAM**: Scales with dataset size; 64 GB+ recommended for whole-brain volumes
 
 ## Installation
 
@@ -67,6 +87,24 @@ For development:
 pip install -e .[dev]
 ```
 
+> **Note**: The production environment is defined in `environment/Dockerfile` (Code Ocean). The local GPU environment is in `environment/Dockerfile_local` (CUDA 12.x). Install dependencies from the relevant Dockerfile when working outside Code Ocean.
+
+## Usage
+
+### Via Code Ocean (recommended)
+
+The capsule entry point is `run_capsule.py`. It reads `processing_manifest.json` from the data folder and runs `smartspim_cell_detection()`.
+
+### Programmatic usage
+
+```python
+from aind_smartspim_segmentation.detect import smartspim_cell_detection
+
+spots_df = smartspim_cell_detection()
+```
+
+Parameters are read from a `processing_manifest.json` file placed in the data folder. See `run_capsule.py` for the expected manifest schema.
+
 ## Contributing
 
 ### Code Quality & Testing
@@ -75,12 +113,16 @@ Use the following tools to maintain code quality:
 
 - **Unit Testing & Coverage**
   ```bash
-  coverage run -m unittest discover && coverage report
+  coverage run -m pytest code/tests/ && coverage report
   ```
+  > The project enforces `fail_under = 50` (increasing as more tests are added). Add tests for any new function you write.
+
 - **Documentation Coverage**
   ```bash
   interrogate .
   ```
+  > `interrogate` requires 100% docstring coverage. Every public function and class must have a docstring.
+
 - **Code Style (PEP 8, Formatting, Imports Sorting)**
   ```bash
   flake8 .
@@ -103,7 +145,7 @@ Use the following tools to maintain code quality:
 To generate documentation:
 
 ```bash
-sphinx-apidoc -o doc_template/source/ src
+sphinx-apidoc -o doc_template/source/ code/
 ```
 
 Then build HTML documentation:
@@ -115,6 +157,3 @@ sphinx-build -b html doc_template/source/ doc_template/build/html
 More details on Sphinx installation [here](https://www.sphinx-doc.org/en/master/usage/installation.html).
 
 ---
-
-&#x20;&#x20;
-

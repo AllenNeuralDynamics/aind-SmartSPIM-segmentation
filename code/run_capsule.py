@@ -51,11 +51,12 @@ def get_data_config(
     # Returning first smartspim dataset found
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
-    print(
-        glob(f"{data_folder}/{processing_manifest_path}"),
-        f"{data_folder}/{processing_manifest_path}",
-    )
-    processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+    manifest_matches = glob(f"{data_folder}/{processing_manifest_path}")
+    if not manifest_matches:
+        raise FileNotFoundError(
+            f"No processing manifest found at {data_folder}/{processing_manifest_path}"
+        )
+    processing_data = manifest_matches[0]
 
     derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")

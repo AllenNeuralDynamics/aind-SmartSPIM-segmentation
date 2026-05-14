@@ -55,7 +55,7 @@ FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Cell Proposals" \
     org.opencontainers.image.description="Container for identification of cell proposals" \
-    org.opencontainers.image.version="1.0.0" \
+    org.opencontainers.image.version="1.0.3" \
     org.opencontainers.image.licenses="MIT"
 
 ARG DEBIAN_FRONTEND=noninteractive

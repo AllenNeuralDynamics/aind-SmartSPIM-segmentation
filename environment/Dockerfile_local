@@ -45,6 +45,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
         neuroglancer==2.40.1 \
         aind-data-schema==1.2.0 \
         pathos==0.3.4 \
+        log-schema==0.2.10.dev1 \
         git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions
 
 #"nvidia-cuda-runtime-cu12==12.8.*" \

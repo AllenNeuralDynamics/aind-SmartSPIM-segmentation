@@ -420,13 +420,12 @@ def smartspim_cell_detection(
     if n_workers > available_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {available_cpus}")
 
-    logger.info(f"{20*'='} Running cell proposal detection {20*'='} New workers pull")
-    logger.info(f"Output folder: {output_folder}")
+    logger.debug(f"Output folder: {output_folder}")
 
     utils.print_system_information(logger)
 
-    logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
-    logger.info(f"Using {available_cpus} workers...")
+    logger.debug(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
+    logger.debug(f"Using {available_cpus} workers...")
 
     # Tracking compute resources
     # Subprocess to track used resources
@@ -447,9 +446,9 @@ def smartspim_cell_detection(
     profile_process.daemon = True
     profile_process.start()
 
-    logger.info("Creating chunked data loader")
+    logger.debug("Creating chunked data loader")
     shm_memory = psutil.virtual_memory()
-    logger.info(f"Shared memory information: {shm_memory}")
+    logger.debug(f"Shared memory information: {shm_memory}")
 
     device = None
 
@@ -462,7 +461,7 @@ def smartspim_cell_detection(
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:
-        logger.info(f"Using segmentation mask in {segmentation_mask_path}")
+        logger.debug(f"Using segmentation mask in {segmentation_mask_path}")
         lazy_data = concatenate_lazy_data(
             dataset_paths=[dataset_path, segmentation_mask_path],
             multiscales=[multiscale, "0"],
@@ -475,7 +474,7 @@ def smartspim_cell_detection(
             f"Segmentation mask provided! New prediction chunksize: {prediction_chunksize}"
             f" - New overlap: {overlap_prediction_chunksize}"
         )
-        logger.info(message)
+        logger.debug(message)
 
     else:
         # No segmentation mask
@@ -491,7 +490,7 @@ def smartspim_cell_detection(
         .metadata()
     )
 
-    logger.info(f"Full image metadata: {image_metadata}")
+    logger.debug(f"Full image metadata: {image_metadata}")
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
 
@@ -501,7 +500,7 @@ def smartspim_cell_detection(
     #     image_metadata["axes"]["x"]["scale"],
     # ]
 
-    logger.info(f"Filtered Image metadata: {image_metadata}")
+    logger.debug(f"Filtered Image metadata: {image_metadata}")
     end_date_time = time()
 
     data_processes.append(
@@ -542,14 +541,14 @@ def smartspim_cell_detection(
         f"Running puncta detection in chunked data. Prediction chunksize: {prediction_chunksize}"
         f"- Overlap chunksize: {overlap_prediction_chunksize}"
     )
-    logger.info(message)
+    logger.debug(message)
 
     start_time = time()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
 
     samples_per_iter = n_workers * batch_size
-    logger.info(f"Number of batches: {total_batches}")
+    logger.debug(f"Number of batches: {total_batches}")
     spots_global_coordinate = None
 
     # Setting exec workers to CO CPUs
@@ -565,7 +564,7 @@ def smartspim_cell_detection(
 
     output_csv = None
 
-    logger.info(f"Number of workers processing data: {exec_n_workers}")
+    logger.debug(f"Number of workers processing data: {exec_n_workers}")
 
     with cupy.cuda.Device(device=device) as cupy_device:
         workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
@@ -578,7 +577,7 @@ def smartspim_cell_detection(
             cupy_device=cupy_device,
         )
 
-        logger.info(f"GPU available information: {gpu_mem_info}")
+        logger.debug(f"GPU available information: {gpu_mem_info}")
 
         if not workers_gpus_valid:
             raise ValueError(
@@ -592,7 +591,7 @@ def smartspim_cell_detection(
                     f"Pinned?: {sample.batch_tensor.is_pinned()} - "
                     f"dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
                 )
-                logger.info(message)
+                logger.debug(message)
 
                 # start_spot_time = time()
 
@@ -616,7 +615,7 @@ def smartspim_cell_detection(
                         for picked_block in picked_blocks
                     ]
 
-                    logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+                    logger.debug(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
                     global_workers_spots = []
 
@@ -654,17 +653,17 @@ def smartspim_cell_detection(
                         f"Not enough samples to retrieve from workers, remaining"
                         f": {i + samples_per_iter - total_batches}"
                     )
-                    logger.info(message)
+                    logger.debug(message)
                     break
 
     if curr_picked_blocks != 0:
-        logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")
+        logger.debug(f"Blocks not processed inside of loop: {curr_picked_blocks}")
         # Assigning blocks to execution workers
         jobs = [
             pool.apply_async(_execute_worker, args=(picked_block,)) for picked_block in picked_blocks
         ]
 
-        logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+        logger.debug(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
         global_workers_spots = []
 
@@ -715,7 +714,7 @@ def smartspim_cell_detection(
             f"Time taken for final prunning {end_final_prunning_time - start_final_prunning_time}"
             f"before: {len(spots_global_coordinate)} After: {len(spots_global_coordinate_prunned)}"
         )
-        logger.info(message)
+        logger.debug(message)
 
         logger.info(f"Processing time: {end_time - start_time} seconds")
 

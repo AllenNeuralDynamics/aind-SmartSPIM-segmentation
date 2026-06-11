@@ -14,6 +14,7 @@ __maintainer_emails__ = [
     "nicholas.lusk@alleninstitute.org",
     "camilo.laiton@alleninstitute.org",
 ]
-__title__ = "aind-SmartSPIM-segmentation"
+__title__ = "aind-smartspim-segmentation"
 __status__ = "Production"  # 'Production', 'Beta'
 __pipeline_version__ = "5.0.0"
+__pipeline_name__ = "SmartSPIM Pipeline"

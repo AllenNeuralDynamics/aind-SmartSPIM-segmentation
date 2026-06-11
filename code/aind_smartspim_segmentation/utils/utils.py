@@ -159,44 +159,6 @@ def stop_child_process(process: multiprocessing.Process):
     process.join()
 
 
-def create_logger(output_log_path: str) -> logging.Logger:
-    """
-    Creates a logger that generates
-    output logs to a specific path.
-
-    Parameters
-    ------------
-    output_log_path: PathLike
-        Path where the log is going
-        to be stored
-
-    Returns
-    -----------
-    logging.Logger
-        Created logger pointing to
-        the file path.
-    """
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    LOGS_FILE = f"{output_log_path}/proposals.log"  # _{CURR_DATE_TIME}
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s : %(message)s",
-        datefmt="%Y-%m-%d %H:%M",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "w"),
-        ],
-        force=True,
-    )
-
-    logging.disable("DEBUG")
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-
-    return logger
-
-
 def get_size(bytes, suffix: str = "B") -> str:
     """
     Scale bytes to its proper format

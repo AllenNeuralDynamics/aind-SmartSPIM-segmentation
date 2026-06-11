@@ -218,10 +218,7 @@ def run():
 
             logger.debug("Final cell segmentation config: %s", smartspim_config)
 
-            pipeline_logger = utils.create_logger(
-                output_log_path=str(smartspim_config["metadata_path"])
-            )
-            smartspim_config["logger"] = pipeline_logger
+            smartspim_config["logger"] = logger
 
             acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
@@ -263,7 +260,7 @@ def run():
             }
 
             ng_utils.generate_neuroglancer_link(
-                proposal_df, ng_config, smartspim_config, dynamic_range, pipeline_logger
+                proposal_df, ng_config, smartspim_config, dynamic_range, logger
             )
 
         else:

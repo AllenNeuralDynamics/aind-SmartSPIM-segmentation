@@ -467,7 +467,7 @@ def smartspim_cell_detection(
         multiprocessing.set_start_method("spawn", force=True)
 
     start_date_time = datetime.now(timezone.utc)
-    resource_monitor_import = utils.ResourceMonitor(interval_seconds=1.0).start()
+    resource_monitor_import = utils.ResourceMonitor(interval_seconds=30.0).start()
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:

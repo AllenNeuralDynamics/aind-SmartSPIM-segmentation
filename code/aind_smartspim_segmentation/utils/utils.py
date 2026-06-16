@@ -23,7 +23,7 @@ from aind_data_schema.core.processing import (
 )
 from aind_data_schema_models.units import MemoryUnit
 
-from .._shared.types import ArrayLike, PathLike
+from .._shared.types import PathLike
 
 
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:

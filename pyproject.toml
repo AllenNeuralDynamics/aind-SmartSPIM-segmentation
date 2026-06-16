@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind_smartspim_segmentation"
 description = "Identifies cell proposals from SmartSPIM datasets."
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Allen Institute for Neural Dynamics"}
 ]
@@ -24,7 +24,9 @@ dependencies = [
     'scipy==1.15.2',
     'cupy-cuda11x==13.4.0',
     'neuroglancer==2.40.1',
-    'aind-data-schema==1.2.0',
+    'aind-data-schema==2.8.0',
+    'aind-data-schema-models>=5.7.1,<6',
+    'pynvml',
     'bokeh==2.4.2',
     'dask[distributed]==2024.4.1',
     'dask_memusage',

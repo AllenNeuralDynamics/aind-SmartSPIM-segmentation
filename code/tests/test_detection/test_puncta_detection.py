@@ -125,5 +125,36 @@ class TestPruneBlobs(unittest.TestCase):
         self.assertEqual(len(removed), 0)
 
 
+class TestResourceMonitor(unittest.TestCase):
+    """Smoke test for ResourceMonitor — verifies sampling without GPU."""
+
+    def test_resource_monitor_collects_samples(self):
+        import time as _time
+
+        # Mock heavy deps not available in test env before importing utils
+        sys.modules.setdefault("matplotlib", MagicMock())
+        sys.modules.setdefault("matplotlib.pyplot", MagicMock())
+        sys.modules.setdefault("aind_data_schema", MagicMock())
+        sys.modules.setdefault("aind_data_schema.components", MagicMock())
+        sys.modules.setdefault("aind_data_schema.components.identifiers", MagicMock())
+        sys.modules.setdefault("aind_data_schema.core", MagicMock())
+        sys.modules.setdefault("aind_data_schema.core.processing", MagicMock())
+        sys.modules.setdefault("aind_data_schema_models", MagicMock())
+        sys.modules.setdefault("aind_data_schema_models.units", MagicMock())
+        sys.modules.setdefault("psutil", MagicMock())
+
+        import psutil as _psutil
+        _psutil.cpu_percent.return_value = 10.0
+        _psutil.virtual_memory.return_value = MagicMock(percent=50.0, total=8 * (1024**3))
+
+        from aind_smartspim_segmentation.utils.utils import ResourceMonitor
+
+        monitor = ResourceMonitor(interval_seconds=0.1).start()
+        _time.sleep(0.35)
+        monitor.stop()
+        self.assertGreater(len(monitor._cpu_usage), 0)
+        self.assertGreater(len(monitor._ram_usage), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

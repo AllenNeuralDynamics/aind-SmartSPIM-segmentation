@@ -43,7 +43,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
         scipy==1.15.2 \
         cupy-cuda12x==13.4.1 \
         neuroglancer==2.40.1 \
-        aind-data-schema==1.2.0 \
+        aind-data-schema==2.8.0 \
+        "aind-data-schema-models>=5.7.1,<6" \
+        pynvml \
         pathos==0.3.4 \
         log-schema==0.2.10.dev1 \
         git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions

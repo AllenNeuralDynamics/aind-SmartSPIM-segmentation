@@ -8,6 +8,7 @@ import os
 import warnings
 
 # from functools import partial
+from datetime import datetime, timezone
 from time import time
 from typing import Dict, Optional, Tuple
 
@@ -16,7 +17,8 @@ import numpy as np
 import pandas as pd
 import psutil
 import torch
-from aind_data_schema.core.processing import DataProcess, ProcessName
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import DataProcess, ProcessName, ProcessStage
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
     concatenate_lazy_data,
@@ -29,7 +31,14 @@ from pathos.pools import _ProcessPool
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
-from .__init__ import __maintainers__, __pipeline_version__, __version__
+from .__init__ import (
+    __maintainers__,
+    __pipeline_name__,
+    __pipeline_version__,
+    __title__,
+    __url__,
+    __version__,
+)
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
 from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_spot_detection
@@ -457,7 +466,8 @@ def smartspim_cell_detection(
         pin_memory = False
         multiprocessing.set_start_method("spawn", force=True)
 
-    start_date_time = time()
+    start_date_time = datetime.now(timezone.utc)
+    resource_monitor_import = utils.ResourceMonitor(interval_seconds=30.0).start()
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:
@@ -501,21 +511,25 @@ def smartspim_cell_detection(
     # ]
 
     logger.debug(f"Filtered Image metadata: {image_metadata}")
-    end_date_time = time()
+    resource_monitor_import.stop()
+    end_date_time = datetime.now(timezone.utc)
 
     data_processes.append(
         DataProcess(
-            name=ProcessName.IMAGE_IMPORTING,
-            software_version=__version__,
+            process_type=ProcessName.IMAGE_IMPORTING,
+            name="Image importing - " + str(dataset_path),
+            stage=ProcessStage.PROCESSING,
+            code=Code(url=__url__, name=__title__, version=__version__),
+            experimenters=__maintainers__,
+            pipeline_name=__pipeline_name__,
             start_date_time=start_date_time,
             end_date_time=end_date_time,
-            input_location=str(dataset_path),
-            output_location=str(dataset_path),
-            outputs={},
-            code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-            code_version=__version__,
-            parameters={},
+            output_path=str(dataset_path),
+            output_parameters={"input_location": str(dataset_path)},
             notes="Importing fused data for cell proposal detection.",
+            resources=resource_monitor_import.to_resource_usage(
+                cpu_cores=int(utils.get_cpu_limit())
+            ),
         )
     )
 
@@ -543,7 +557,8 @@ def smartspim_cell_detection(
     )
     logger.debug(message)
 
-    start_time = time()
+    start_time = datetime.now(timezone.utc)
+    resource_monitor_spot = utils.ResourceMonitor(interval_seconds=1.0).start()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
 
@@ -694,7 +709,8 @@ def smartspim_cell_detection(
                     axis=0,
                 )
 
-    end_time = time()
+    resource_monitor_spot.stop()
+    end_time = datetime.now(timezone.utc)
 
     if spots_global_coordinate is None:
         logger.info("No spots found!")
@@ -716,7 +732,8 @@ def smartspim_cell_detection(
         )
         logger.debug(message)
 
-        logger.info(f"Processing time: {end_time - start_time} seconds")
+        duration_seconds = (end_time - start_time).total_seconds()
+        logger.info(f"Processing time: {duration_seconds} seconds")
 
         # Saving spots as numpy and csv
         # np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
@@ -752,16 +769,17 @@ def smartspim_cell_detection(
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_SPOT_DETECTION,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_SPOT_DETECTION,
+                name="Image spot detection - " + str(dataset_path),
+                stage=ProcessStage.PROCESSING,
+                code=Code(url=__url__, name=__title__, version=__version__),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_time,
                 end_date_time=end_time,
-                input_location=str(dataset_path),
-                output_location=str(output_folder),
-                outputs={},
-                code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-                code_version=__version__,
-                parameters={
+                output_path=str(output_folder),
+                output_parameters={
+                    "input_location": str(dataset_path),
                     "multiscale": multiscale,
                     "spot_parameters": spot_parameters,
                     "segmentation_mask_path": segmentation_mask_path,
@@ -772,17 +790,22 @@ def smartspim_cell_detection(
                         "axis_pad": axis_pad,
                         "batch_size": batch_size,
                     },
-                    "output_folder": output_folder,
+                    "output_folder": str(output_folder),
+                    "duration_seconds": duration_seconds,
                 },
                 notes=f"Detecting cell proposals in path: {dataset_path}",
+                resources=resource_monitor_spot.to_resource_usage(
+                    cpu_cores=int(utils.get_cpu_limit())
+                ),
             )
         )
 
         utils.generate_processing(
             data_processes=data_processes,
             dest_processing=str(metadata_path),
-            processor_full_name=__maintainers__[0],
+            pipeline_name=__pipeline_name__,
             pipeline_version=__pipeline_version__,
+            pipeline_url=__url__,
         )
 
     # Getting tracked resources and plotting image

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import yaml
-from schlog import setup_logging
+from log_schema import setup_logging
 
 from aind_smartspim_segmentation import __pipeline_name__, __title__, __version__
 from aind_smartspim_segmentation._shared.types import PathLike

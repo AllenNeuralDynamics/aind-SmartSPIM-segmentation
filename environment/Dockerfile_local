@@ -48,7 +48,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         pynvml \
         pathos==0.3.4 \
         log-schema==0.2.10.dev1 \
-        git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions
+        git+https://github.com/AllenNeuralDynamics/aind-large-scale-prediction.git@unpinned-versions \
+        pandas
 
 #"nvidia-cuda-runtime-cu12==12.8.*" \
  

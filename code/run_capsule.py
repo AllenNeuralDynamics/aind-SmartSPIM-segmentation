@@ -16,6 +16,7 @@ from log_schema import setup_logging
 from aind_smartspim_segmentation import __pipeline_name__, __title__, __version__
 from aind_smartspim_segmentation._shared.types import PathLike
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
+from aind_smartspim_segmentation.utils import metadata_compat
 from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
 from aind_smartspim_segmentation.utils import utils
 
@@ -234,21 +235,14 @@ def run():
             dynamic_range = ng_utils.calculate_dynamic_range(
                 smartspim_config["dataset_path"], 99, 3
             )
-            res = {}
-
-            axis_names = [axis["name"] for axis in acquisition["axes"]]
-            scales = [
-                float(scale)
-                for scale in acquisition["tiles"][0]["coordinate_transformations"][1]["scale"]
-            ]
-            for name, scale in zip(axis_names, scales[::-1]):
-                res[name] = scale
+            x_res, y_res, z_res = metadata_compat.get_voxel_resolution(acquisition)
+            res = {"X": x_res, "Y": y_res, "Z": z_res}
 
             ng_config = {
                 "base_url": "https://neuroglancer-demo.appspot.com/#!",
                 "crossSectionScale": 15,
                 "projectionScale": 16384,
-                "orientation": acquisition,
+                "orientation": metadata_compat.normalize_orientation(acquisition),
                 "dimensions": {
                     "z": [res["Z"] * 10**-6, "m"],
                     "y": [res["Y"] * 10**-6, "m"],

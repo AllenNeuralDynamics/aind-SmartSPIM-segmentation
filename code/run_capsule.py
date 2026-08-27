@@ -280,13 +280,14 @@ def run():
                 filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
                 dictionary=pipeline_config,
             )
-    except Exception:
+    except Exception as e:
         duration_seconds = round(time.monotonic() - start_time, 3)
         logger.error(
             "Segmentation stage failed",
             exc_info=True,
             extra={
                 "event_type": "stage_failure",
+                "error": f"{type(e).__name__}: {e}",
                 "dataset_name": dataset_name,
                 "asset_name": smartspim_dataset_name,
                 "channel": channel_to_process,

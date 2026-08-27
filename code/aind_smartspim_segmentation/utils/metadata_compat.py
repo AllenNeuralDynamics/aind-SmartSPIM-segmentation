@@ -124,3 +124,20 @@ def normalize_orientation(acquisition_config: Dict) -> Dict:
     neuroglancer link generation).
     """
     return {"axes": get_acquisition_axes(acquisition_config)}
+
+
+def get_raw_dataset_name(dataset_name: Optional[str]) -> Optional[str]:
+    """
+    Returns the raw acquisition dataset name from an asset name,
+    stripping the derived suffix if present. Examples:
+    "SmartSPIM_695464_2023-10-28_16-02-45_stitched_2023-10-31_22-14-46"
+    -> "SmartSPIM_695464_2023-10-28_16-02-45";
+    "861555_2026-07-09_04-33-35" is returned unchanged.
+
+    Intended for logging so every pipeline step reports the same
+    dataset identity regardless of which derived asset it consumes.
+    """
+    if not dataset_name:
+        return dataset_name
+
+    return dataset_name.split("_stitched_")[0]

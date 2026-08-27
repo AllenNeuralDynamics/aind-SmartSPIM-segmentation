@@ -73,7 +73,9 @@ def get_data_config(
     fname = processing_data.split("/")[-1]
     shutil.copyfile(processing_data, f"{results_folder}/{fname}")
 
-    print(f"processing manisfest copied to {results_folder}/{fname}")
+    logging.getLogger(__name__).info(
+        f"Processing manifest copied to {results_folder}/{fname}"
+    )
 
     return derivatives_dict, smartspim_dataset
 
@@ -169,6 +171,7 @@ def run():
         raise ValueError("Please, provide segmentation channels.")
 
     channel_to_process = segmentation_info.get("channel")
+    dataset_name = metadata_compat.get_raw_dataset_name(smartspim_dataset_name)
 
     logger.info(
         "Segmentation stage started",
@@ -176,7 +179,17 @@ def run():
             "event_type": "stage_start",
             "data_folder": data_folder,
             "results_folder": results_folder,
-            "dataset_name": smartspim_dataset_name,
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
+            "channel": channel_to_process,
+        },
+    )
+    logger.info(
+        f"Processing derived asset {smartspim_dataset_name} - channel {channel_to_process}",
+        extra={
+            "event_type": "dataset_resolved",
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
             "channel": channel_to_process,
         },
     )
@@ -258,7 +271,11 @@ def run():
             )
 
         else:
-            logger.warning("No segmentation channel, pipeline config: %s", pipeline_config)
+            logger.warning(
+                "No segmentation channel provided in the processing manifest",
+                extra={"dataset_name": dataset_name, "status": "no_channels"},
+            )
+            logger.debug("Pipeline config without segmentation channel: %s", pipeline_config)
             utils.save_dict_as_json(
                 filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
                 dictionary=pipeline_config,
@@ -270,7 +287,9 @@ def run():
             exc_info=True,
             extra={
                 "event_type": "stage_failure",
-                "dataset_name": smartspim_dataset_name,
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
                 "duration_seconds": duration_seconds,
             },
         )
@@ -281,7 +300,9 @@ def run():
             "Segmentation stage completed",
             extra={
                 "event_type": "stage_complete",
-                "dataset_name": smartspim_dataset_name,
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
                 "duration_seconds": duration_seconds,
             },
         )

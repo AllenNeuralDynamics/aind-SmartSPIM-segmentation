@@ -232,7 +232,7 @@ def execute_worker(
             f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {data.shape[0]}"
             f"- Data shape: {data.shape} - Current block: {curr_block.shape}"
         )
-        logger.info(message)
+        logger.debug(message)
 
         # Making sure CuPy it's running in the correct device
         spots = traditional_3D_spot_detection(
@@ -250,7 +250,7 @@ def execute_worker(
         # Adding spots to current batch list
         curr_spots = None
         if spots is None:
-            logger.info(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
+            logger.debug(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
 
         else:
             # Recover global position of internal chunk
@@ -292,7 +292,7 @@ def execute_worker(
                 f"- Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos}"
                 f"- unpadded global coords: {unpadded_global_slice}"
             )
-            logger.info(message)
+            logger.debug(message)
 
             # Adding spots to the worker batch
             if global_worker_spots is None:
@@ -348,8 +348,10 @@ def has_enough_gpu_memory(
         block_size_bytes = np.prod(block_shape) * np.dtype(dtype).itemsize
         total_required_memory = num_blocks * block_size_bytes
 
-    except cupy.cuda.runtime.CUDARuntimeError as e:
-        print(f"[GPU ERROR] CuPy could not access the device: {e}")
+    except cupy.cuda.runtime.CUDARuntimeError:
+        logging.getLogger(__name__).error(
+            "CuPy could not access the GPU device", exc_info=True
+        )
         return False, 0.0
 
     return total_required_memory <= target_memory, float(total_memory)

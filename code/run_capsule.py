@@ -16,6 +16,7 @@ from log_schema import setup_logging
 from aind_smartspim_segmentation import __pipeline_name__, __title__, __version__
 from aind_smartspim_segmentation._shared.types import PathLike
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
+from aind_smartspim_segmentation.utils import metadata_compat
 from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
 from aind_smartspim_segmentation.utils import utils
 
@@ -72,7 +73,9 @@ def get_data_config(
     fname = processing_data.split("/")[-1]
     shutil.copyfile(processing_data, f"{results_folder}/{fname}")
 
-    print(f"processing manisfest copied to {results_folder}/{fname}")
+    logging.getLogger(__name__).info(
+        f"Processing manifest copied to {results_folder}/{fname}"
+    )
 
     return derivatives_dict, smartspim_dataset
 
@@ -168,6 +171,7 @@ def run():
         raise ValueError("Please, provide segmentation channels.")
 
     channel_to_process = segmentation_info.get("channel")
+    dataset_name = metadata_compat.get_raw_dataset_name(smartspim_dataset_name)
 
     logger.info(
         "Segmentation stage started",
@@ -175,7 +179,17 @@ def run():
             "event_type": "stage_start",
             "data_folder": data_folder,
             "results_folder": results_folder,
-            "dataset_name": smartspim_dataset_name,
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
+            "channel": channel_to_process,
+        },
+    )
+    logger.info(
+        f"Processing derived asset {smartspim_dataset_name} - channel {channel_to_process}",
+        extra={
+            "event_type": "dataset_resolved",
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
             "channel": channel_to_process,
         },
     )
@@ -234,21 +248,14 @@ def run():
             dynamic_range = ng_utils.calculate_dynamic_range(
                 smartspim_config["dataset_path"], 99, 3
             )
-            res = {}
-
-            axis_names = [axis["name"] for axis in acquisition["axes"]]
-            scales = [
-                float(scale)
-                for scale in acquisition["tiles"][0]["coordinate_transformations"][1]["scale"]
-            ]
-            for name, scale in zip(axis_names, scales[::-1]):
-                res[name] = scale
+            x_res, y_res, z_res = metadata_compat.get_voxel_resolution(acquisition)
+            res = {"X": x_res, "Y": y_res, "Z": z_res}
 
             ng_config = {
                 "base_url": "https://neuroglancer-demo.appspot.com/#!",
                 "crossSectionScale": 15,
                 "projectionScale": 16384,
-                "orientation": acquisition,
+                "orientation": metadata_compat.normalize_orientation(acquisition),
                 "dimensions": {
                     "z": [res["Z"] * 10**-6, "m"],
                     "y": [res["Y"] * 10**-6, "m"],
@@ -264,19 +271,26 @@ def run():
             )
 
         else:
-            logger.warning("No segmentation channel, pipeline config: %s", pipeline_config)
+            logger.warning(
+                "No segmentation channel provided in the processing manifest",
+                extra={"dataset_name": dataset_name, "status": "no_channels"},
+            )
+            logger.debug("Pipeline config without segmentation channel: %s", pipeline_config)
             utils.save_dict_as_json(
                 filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
                 dictionary=pipeline_config,
             )
-    except Exception:
+    except Exception as e:
         duration_seconds = round(time.monotonic() - start_time, 3)
         logger.error(
             "Segmentation stage failed",
             exc_info=True,
             extra={
                 "event_type": "stage_failure",
-                "dataset_name": smartspim_dataset_name,
+                "error": f"{type(e).__name__}: {e}",
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
                 "duration_seconds": duration_seconds,
             },
         )
@@ -287,7 +301,9 @@ def run():
             "Segmentation stage completed",
             extra={
                 "event_type": "stage_complete",
-                "dataset_name": smartspim_dataset_name,
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
                 "duration_seconds": duration_seconds,
             },
         )

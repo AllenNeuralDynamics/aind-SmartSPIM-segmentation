@@ -97,7 +97,7 @@ def get_voxel_resolution(acquisition_config: Dict) -> Tuple[float, float, float]
         scale = [t["scale"] for t in transforms if t.get("type") == "scale"][0]
         return float(scale[0]), float(scale[1]), float(scale[2])
 
-    # v2: scale is ordered following the coordinate system axes (e.g. Z, Y, X)
+    # v2: scale is ordered by acquisition axes
     imaging_config = _get_imaging_config(acquisition_config)
 
     if imaging_config is None or not imaging_config.get("images"):

@@ -16,5 +16,5 @@ __maintainer_emails__ = [
 ]
 __title__ = "aind-smartspim-segmentation"
 __status__ = "Production"  # 'Production', 'Beta'
-__pipeline_version__ = "5.0.0"
+__pipeline_version__ = "6.0.0"
 __pipeline_name__ = "SmartSPIM Pipeline"

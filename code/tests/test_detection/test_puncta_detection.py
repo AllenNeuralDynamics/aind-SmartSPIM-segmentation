@@ -74,7 +74,7 @@ class TestPruneBlobs(unittest.TestCase):
         """When two blobs overlap, the higher-intensity one survives."""
         blobs_array = np.array(
             [
-                [10, 10, 10, 50],   # lower → removed
+                [10, 10, 10, 50],  # lower → removed
                 [10, 10, 10, 150],  # higher → survives
             ],
             dtype=float,
@@ -144,6 +144,7 @@ class TestResourceMonitor(unittest.TestCase):
         sys.modules.setdefault("psutil", MagicMock())
 
         import psutil as _psutil
+
         _psutil.cpu_percent.return_value = 10.0
         _psutil.virtual_memory.return_value = MagicMock(percent=50.0, total=8 * (1024**3))
 

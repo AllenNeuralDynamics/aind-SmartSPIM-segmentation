@@ -26,10 +26,11 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
-from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 from pathos.pools import _ProcessPool
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
+
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 
 from .__init__ import (
     __maintainers__,
@@ -141,7 +142,7 @@ def validate_chunk(data: ArrayLike) -> bool:
        coming from the SmartSPIM pipeline.
     """
     warnings.warn(
-        "validate_chunk() is deprecated since version 0.0.7 and will be " "removed in 0.0.8.",
+        "validate_chunk() is deprecated since version 0.0.7 and will be removed in 0.0.8.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -349,9 +350,7 @@ def has_enough_gpu_memory(
         total_required_memory = num_blocks * block_size_bytes
 
     except cupy.cuda.runtime.CUDARuntimeError:
-        logging.getLogger(__name__).error(
-            "CuPy could not access the GPU device", exc_info=True
-        )
+        logging.getLogger(__name__).error("CuPy could not access the GPU device", exc_info=True)
         return False, 0.0
 
     return total_required_memory <= target_memory, float(total_memory)
@@ -677,7 +676,8 @@ def smartspim_cell_detection(
         logger.debug(f"Blocks not processed inside of loop: {curr_picked_blocks}")
         # Assigning blocks to execution workers
         jobs = [
-            pool.apply_async(_execute_worker, args=(picked_block,)) for picked_block in picked_blocks
+            pool.apply_async(_execute_worker, args=(picked_block,))
+            for picked_block in picked_blocks
         ]
 
         logger.debug(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")

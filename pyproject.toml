@@ -40,11 +40,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    'black',
+    'ruff',
     'coverage',
-    'flake8',
     'interrogate',
-    'isort',
     'Sphinx',
     'pygit2',
     'furo'
@@ -56,27 +54,6 @@ where = ["code"]
 [tool.setuptools.dynamic]
 version = {attr = "aind_smartspim_segmentation.__version__"}
 
-[tool.black]
-line-length = 101
-target_version = ['py39']
-exclude = '''
-
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | build
-    | dist
-  )/
-  | .gitignore
-)
-'''
-
 [tool.coverage.run]
 omit = ["*__init__*"]
 source = ["aind_smartspim_segmentation", "tests"]
@@ -85,9 +62,18 @@ source = ["aind_smartspim_segmentation", "tests"]
 exclude_lines = ["if __name__ == .__main__.:"]
 fail_under = 50
 
-[tool.isort]
-line_length = 101
-profile = "black"
+[tool.ruff]
+line-length = 100
+extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+# ruff format enforces line-length structurally; E501 only fires on tokens it
+# cannot split (URLs, long string literals), so the two rules conflict.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]

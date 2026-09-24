@@ -11,14 +11,12 @@ from pathlib import Path
 from typing import List, Tuple
 
 import yaml
-from log_schema import setup_logging
-
 from aind_smartspim_segmentation import __pipeline_name__, __title__, __version__
 from aind_smartspim_segmentation._shared.types import PathLike
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
-from aind_smartspim_segmentation.utils import metadata_compat
+from aind_smartspim_segmentation.utils import metadata_compat, utils
 from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
-from aind_smartspim_segmentation.utils import utils
+from log_schema import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +71,7 @@ def get_data_config(
     fname = processing_data.split("/")[-1]
     shutil.copyfile(processing_data, f"{results_folder}/{fname}")
 
-    logging.getLogger(__name__).info(
-        f"Processing manifest copied to {results_folder}/{fname}"
-    )
+    logging.getLogger(__name__).info(f"Processing manifest copied to {results_folder}/{fname}")
 
     return derivatives_dict, smartspim_dataset
 
@@ -237,7 +233,7 @@ def run():
             acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
             if not len(acquisition):
-                raise ValueError(f"Please, provide a valid acquisition!")
+                raise ValueError("Please, provide a valid acquisition!")
 
             # run detection
             proposal_df = smartspim_cell_detection(**smartspim_config)

@@ -342,9 +342,7 @@ def create_dispim_transform(
 
     shift_shear_rot = (
         # rotation_transformation
-        scale_matrix
-        @ shear_matrix
-        @ translation_transformation_center
+        scale_matrix @ shear_matrix @ translation_transformation_center
     )
 
     output_shape_after_rot = get_output_dimensions(shift_shear_rot, image_data_shape)

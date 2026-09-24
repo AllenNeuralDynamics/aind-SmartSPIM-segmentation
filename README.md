@@ -1,5 +1,7 @@
 # aind-smartspim-segmentation
 
+![support](https://img.shields.io/badge/support-supported-brightgreen)
+
 ## Large-scale Detection of Cell-like Structures
 
 aind-smartspim-segmentation provides an algorithm for detecting cell-like structures in large-scale microscopy images. The package currently includes:

@@ -7,15 +7,23 @@ import logging
 import multiprocessing
 import os
 import platform
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import psutil
-from aind_data_schema.core.processing import DataProcess, PipelineProcess, Processing
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import (
+    DataProcess,
+    Processing,
+    ResourceTimestamped,
+    ResourceUsage,
+)
+from aind_data_schema_models.units import MemoryUnit
 
-from .._shared.types import ArrayLike, PathLike
+from .._shared.types import PathLike
 
 
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
@@ -159,42 +167,78 @@ def stop_child_process(process: multiprocessing.Process):
     process.join()
 
 
-def create_logger(output_log_path: str) -> logging.Logger:
-    """
-    Creates a logger that generates
-    output logs to a specific path.
+class ResourceMonitor:
+    """Thread-based CPU/RAM/GPU sampler compatible with ResourceUsage."""
 
-    Parameters
-    ------------
-    output_log_path: PathLike
-        Path where the log is going
-        to be stored
+    def __init__(self, interval_seconds: Optional[float] = 1.0):
+        self._interval = interval_seconds
+        self._cpu_usage: List[ResourceTimestamped] = []
+        self._ram_usage: List[ResourceTimestamped] = []
+        self._gpu_usage: List[ResourceTimestamped] = []
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._gpu_available = False
 
-    Returns
-    -----------
-    logging.Logger
-        Created logger pointing to
-        the file path.
-    """
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    LOGS_FILE = f"{output_log_path}/proposals.log"  # _{CURR_DATE_TIME}
+    def _run(self) -> None:
+        _gpu_handle = None
+        _pynvml = None
+        try:
+            import pynvml as _pynvml
 
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s : %(message)s",
-        datefmt="%Y-%m-%d %H:%M",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "w"),
-        ],
-        force=True,
-    )
+            _pynvml.nvmlInit()
+            self._gpu_available = True
+            _gpu_handle = _pynvml.nvmlDeviceGetHandleByIndex(0)
+        except Exception:
+            pass
 
-    logging.disable("DEBUG")
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
+        while not self._stop_event.is_set():
+            now = datetime.now(timezone.utc)
+            self._cpu_usage.append(
+                ResourceTimestamped(timestamp=now, usage=psutil.cpu_percent(interval=None))
+            )
+            self._ram_usage.append(
+                ResourceTimestamped(timestamp=now, usage=psutil.virtual_memory().percent)
+            )
+            if self._gpu_available and _gpu_handle is not None and _pynvml is not None:
+                try:
+                    util = _pynvml.nvmlDeviceGetUtilizationRates(_gpu_handle)
+                    self._gpu_usage.append(
+                        ResourceTimestamped(timestamp=now, usage=float(util.gpu))
+                    )
+                except Exception:
+                    pass
+            self._stop_event.wait(self._interval)
 
-    return logger
+    def start(self) -> "ResourceMonitor":
+        """Start the background sampling thread."""
+        psutil.cpu_percent(interval=None)  # prime the first sample
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Stop the background sampling thread."""
+        self._stop_event.set()
+        self._thread.join(timeout=self._interval + 1)
+
+    def __enter__(self) -> "ResourceMonitor":
+        return self.start()
+
+    def __exit__(self, *exc_info) -> None:
+        self.stop()
+
+    def to_resource_usage(self, cpu_cores: Optional[int] = None) -> ResourceUsage:
+        """Return a ResourceUsage snapshot of collected samples."""
+        return ResourceUsage(
+            os=platform.system(),
+            architecture=platform.machine(),
+            cpu_cores=cpu_cores,
+            system_memory=round(psutil.virtual_memory().total / (1024**3), 2),
+            system_memory_unit=MemoryUnit.GB,
+            cpu_usage=self._cpu_usage or None,
+            ram_usage=self._ram_usage or None,
+            gpu_usage=self._gpu_usage or None,
+            ram_unit=MemoryUnit.GB,
+        )
 
 
 def get_size(bytes, suffix: str = "B") -> str:
@@ -253,7 +297,7 @@ def get_cpu_limit():
 
         container_cpus = cfs_quota_us // cfs_period_us
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         container_cpus = 0
 
     # For physical machine, the `cfs_quota_us` could be '-1'
@@ -273,7 +317,7 @@ def get_memory_limit_bytes():
     memory_env = os.environ.get("CO_MEMORY")
     if memory_env:
         try:
-            return int(memory_env)  # Convert GB → bytes
+            return int(memory_env) * (1024**3)  # Convert GB → bytes
         except ValueError:
             pass  # Invalid format, fallback
 
@@ -336,7 +380,7 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"SLURM ID: {slurm_id}")
     logger.info(f"SLURM GPUs: {os.environ.get('SLURM_JOB_GPUS')}")
     logger.info(f"SLURM CPUs: {os.environ.get('SLURM_JOB_CPUS_PER_NODE')}")
-    logger.info(f"SLURM variables {[( k, v ) for k, v in os.environ.items() if 'SLURM' in k]}")
+    logger.info(f"SLURM variables {[(k, v) for k, v in os.environ.items() if 'SLURM' in k]}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()
@@ -485,44 +529,32 @@ def read_json_as_dict(filepath: str):
 def generate_processing(
     data_processes: List[DataProcess],
     dest_processing: str,
-    processor_full_name: str,
+    pipeline_name: str,
     pipeline_version: str,
-):
+    pipeline_url: str,
+) -> None:
     """
     Generates data description for the output folder.
 
     Parameters
-    ------------------------
-
-    data_processes: List[dict]
-        List with the processes aplied in the pipeline.
-
-    dest_processing: PathLike
-        Path where the processing file will be placed.
-
-    processor_full_name: str
-        Person in charged of running the pipeline
-        for this data asset
-
+    ----------
+    data_processes: List[DataProcess]
+        List with the processes applied in the pipeline.
+    dest_processing: str
+        Directory where processing.json will be written.
+    pipeline_name: str
+        Name of the pipeline (must match pipeline_name on each DataProcess).
     pipeline_version: str
-        Terastitcher pipeline version
-
+        Version of the pipeline.
+    pipeline_url: str
+        URL of the pipeline repository.
     """
-    # flake8: noqa: E501
-    processing_pipeline = PipelineProcess(
+    pipelines = [Code(url=pipeline_url, name=pipeline_name, version=pipeline_version)]
+    processing = Processing.create_with_sequential_process_graph(
         data_processes=data_processes,
-        processor_full_name=processor_full_name,
-        pipeline_version=pipeline_version,
-        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
-        note="Metadata for cell proposal detection step",
+        pipelines=pipelines,
+        notes="Cell proposal detection step metadata.",
     )
-
-    processing = Processing(
-        processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata of cell proposals \
-            and needs to be compiled with other steps at the end",
-    )
-
     processing.write_standard_file(output_directory=dest_processing)
 
 

@@ -144,3 +144,6 @@ notebook/
 # Code Ocean
 /data/
 /environment/environment.yml
+
+# Codegraph
+.codegraph/

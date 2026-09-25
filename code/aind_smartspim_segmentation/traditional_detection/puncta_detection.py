@@ -389,11 +389,14 @@ def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[L
         x_min = int(max(0, p[2] - radius))
         x_max = int(min(width - 1, p[2] + radius))
 
-        yield p, img[
-            z_min:z_max,  # noqa: E203
-            y_min:y_max,  # noqa: E203
-            x_min:x_max,  # noqa: E203
-        ]
+        yield (
+            p,
+            img[
+                z_min:z_max,  # noqa: E203
+                y_min:y_max,  # noqa: E203
+                x_min:x_max,  # noqa: E203
+            ],
+        )
 
 
 def estimate_background_foreground(
@@ -585,7 +588,7 @@ def traditional_3D_spot_detection(
         pruned_spots, _ = prune_blobs(initial_spots.get(), minYX + radius_confidence, eps=eps)
         prunning_end_time = time()
         if verbose:
-            logger.info(f"Prunning spots time: {prunning_end_time - prunning_start_time}")
+            logger.info(f"Pruning spots time: {prunning_end_time - prunning_start_time}")
 
         guassian_laplaced_img_memory = gaussian_laplaced_img.get()
 

@@ -8,6 +8,7 @@ import os
 import warnings
 
 # from functools import partial
+from datetime import datetime, timezone
 from time import time
 from typing import Dict, Optional, Tuple
 
@@ -16,7 +17,8 @@ import numpy as np
 import pandas as pd
 import psutil
 import torch
-from aind_data_schema.core.processing import DataProcess, ProcessName
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import DataProcess, ProcessName, ProcessStage
 from aind_large_scale_prediction.generator.dataset import create_data_loader
 from aind_large_scale_prediction.generator.utils import (
     concatenate_lazy_data,
@@ -24,12 +26,20 @@ from aind_large_scale_prediction.generator.utils import (
     unpad_global_coords,
 )
 from aind_large_scale_prediction.io import ImageReaderFactory
-from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
 from pathos.pools import _ProcessPool
 from scipy.ndimage import gaussian_filter
 from scipy.signal import argrelmin
 
-from .__init__ import __maintainers__, __pipeline_version__, __version__
+from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
+
+from .__init__ import (
+    __maintainers__,
+    __pipeline_name__,
+    __pipeline_version__,
+    __title__,
+    __url__,
+    __version__,
+)
 
 # from lazy_deskewing import (create_dispim_config, create_dispim_transform, lazy_deskewing)
 from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_spot_detection
@@ -132,7 +142,7 @@ def validate_chunk(data: ArrayLike) -> bool:
        coming from the SmartSPIM pipeline.
     """
     warnings.warn(
-        "validate_chunk() is deprecated since version 0.0.7 and will be " "removed in 0.0.8.",
+        "validate_chunk() is deprecated since version 0.0.7 and will be removed in 0.0.8.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -223,7 +233,7 @@ def execute_worker(
             f"Worker [{curr_pid}] Processing inner batch {batch_idx} out of {data.shape[0]}"
             f"- Data shape: {data.shape} - Current block: {curr_block.shape}"
         )
-        logger.info(message)
+        logger.debug(message)
 
         # Making sure CuPy it's running in the correct device
         spots = traditional_3D_spot_detection(
@@ -241,7 +251,7 @@ def execute_worker(
         # Adding spots to current batch list
         curr_spots = None
         if spots is None:
-            logger.info(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
+            logger.debug(f"Worker [{curr_pid}] - No spots found in inner batch {batch_idx}")
 
         else:
             # Recover global position of internal chunk
@@ -281,9 +291,9 @@ def execute_worker(
             message = (
                 f"Worker {curr_pid}: Found {len(curr_spots)} spots for in inner batch {batch_idx}"
                 f"- Internal pos: {batch_internal_slice} - Global coords: {global_coord_pos}"
-                f"- upadded global coords: {unpadded_global_slice}"
+                f"- unpadded global coords: {unpadded_global_slice}"
             )
-            logger.info(message)
+            logger.debug(message)
 
             # Adding spots to the worker batch
             if global_worker_spots is None:
@@ -339,8 +349,8 @@ def has_enough_gpu_memory(
         block_size_bytes = np.prod(block_shape) * np.dtype(dtype).itemsize
         total_required_memory = num_blocks * block_size_bytes
 
-    except cupy.cuda.runtime.CUDARuntimeError as e:
-        print(f"[GPU ERROR] CuPy could not access the device: {e}")
+    except cupy.cuda.runtime.CUDARuntimeError:
+        logging.getLogger(__name__).error("CuPy could not access the GPU device", exc_info=True)
         return False, 0.0
 
     return total_required_memory <= target_memory, float(total_memory)
@@ -420,13 +430,12 @@ def smartspim_cell_detection(
     if n_workers > available_cpus:
         raise ValueError(f"Provided workers {n_workers} > current workers {available_cpus}")
 
-    logger.info(f"{20*'='} Running cell proposal detection {20*'='} New workers pull")
-    logger.info(f"Output folder: {output_folder}")
+    logger.debug(f"Output folder: {output_folder}")
 
     utils.print_system_information(logger)
 
-    logger.info(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
-    logger.info(f"Using {available_cpus} workers...")
+    logger.debug(f"Processing dataset {dataset_path} with mulsticale {multiscale}")
+    logger.debug(f"Using {available_cpus} workers...")
 
     # Tracking compute resources
     # Subprocess to track used resources
@@ -447,9 +456,9 @@ def smartspim_cell_detection(
     profile_process.daemon = True
     profile_process.start()
 
-    logger.info("Creating chunked data loader")
+    logger.debug("Creating chunked data loader")
     shm_memory = psutil.virtual_memory()
-    logger.info(f"Shared memory information: {shm_memory}")
+    logger.debug(f"Shared memory information: {shm_memory}")
 
     device = None
 
@@ -458,11 +467,12 @@ def smartspim_cell_detection(
         pin_memory = False
         multiprocessing.set_start_method("spawn", force=True)
 
-    start_date_time = time()
+    start_date_time = datetime.now(timezone.utc)
+    resource_monitor_import = utils.ResourceMonitor(interval_seconds=30.0).start()
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:
-        logger.info(f"Using segmentation mask in {segmentation_mask_path}")
+        logger.debug(f"Using segmentation mask in {segmentation_mask_path}")
         lazy_data = concatenate_lazy_data(
             dataset_paths=[dataset_path, segmentation_mask_path],
             multiscales=[multiscale, "0"],
@@ -475,7 +485,7 @@ def smartspim_cell_detection(
             f"Segmentation mask provided! New prediction chunksize: {prediction_chunksize}"
             f" - New overlap: {overlap_prediction_chunksize}"
         )
-        logger.info(message)
+        logger.debug(message)
 
     else:
         # No segmentation mask
@@ -491,7 +501,7 @@ def smartspim_cell_detection(
         .metadata()
     )
 
-    logger.info(f"Full image metadata: {image_metadata}")
+    logger.debug(f"Full image metadata: {image_metadata}")
 
     image_metadata = utils.parse_zarr_metadata(metadata=image_metadata, multiscale=multiscale)
 
@@ -501,22 +511,26 @@ def smartspim_cell_detection(
     #     image_metadata["axes"]["x"]["scale"],
     # ]
 
-    logger.info(f"Filtered Image metadata: {image_metadata}")
-    end_date_time = time()
+    logger.debug(f"Filtered Image metadata: {image_metadata}")
+    resource_monitor_import.stop()
+    end_date_time = datetime.now(timezone.utc)
 
     data_processes.append(
         DataProcess(
-            name=ProcessName.IMAGE_IMPORTING,
-            software_version=__version__,
+            process_type=ProcessName.IMAGE_IMPORTING,
+            name="Image importing - " + str(dataset_path),
+            stage=ProcessStage.PROCESSING,
+            code=Code(url=__url__, name=__title__, version=__version__),
+            experimenters=__maintainers__,
+            pipeline_name=__pipeline_name__,
             start_date_time=start_date_time,
             end_date_time=end_date_time,
-            input_location=str(dataset_path),
-            output_location=str(dataset_path),
-            outputs={},
-            code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-            code_version=__version__,
-            parameters={},
+            output_path=str(dataset_path),
+            output_parameters={"input_location": str(dataset_path)},
             notes="Importing fused data for cell proposal detection.",
+            resources=resource_monitor_import.to_resource_usage(
+                cpu_cores=int(utils.get_cpu_limit())
+            ),
         )
     )
 
@@ -542,14 +556,15 @@ def smartspim_cell_detection(
         f"Running puncta detection in chunked data. Prediction chunksize: {prediction_chunksize}"
         f"- Overlap chunksize: {overlap_prediction_chunksize}"
     )
-    logger.info(message)
+    logger.debug(message)
 
-    start_time = time()
+    start_time = datetime.now(timezone.utc)
+    resource_monitor_spot = utils.ResourceMonitor(interval_seconds=1.0).start()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
 
     samples_per_iter = n_workers * batch_size
-    logger.info(f"Number of batches: {total_batches}")
+    logger.debug(f"Number of batches: {total_batches}")
     spots_global_coordinate = None
 
     # Setting exec workers to CO CPUs
@@ -565,7 +580,7 @@ def smartspim_cell_detection(
 
     output_csv = None
 
-    logger.info(f"Number of workers processing data: {exec_n_workers}")
+    logger.debug(f"Number of workers processing data: {exec_n_workers}")
 
     with cupy.cuda.Device(device=device) as cupy_device:
         workers_gpus_valid, gpu_mem_info = has_enough_gpu_memory(
@@ -578,7 +593,7 @@ def smartspim_cell_detection(
             cupy_device=cupy_device,
         )
 
-        logger.info(f"GPU available information: {gpu_mem_info}")
+        logger.debug(f"GPU available information: {gpu_mem_info}")
 
         if not workers_gpus_valid:
             raise ValueError(
@@ -592,7 +607,7 @@ def smartspim_cell_detection(
                     f"Pinned?: {sample.batch_tensor.is_pinned()} - "
                     f"dtype: {sample.batch_tensor.dtype} - device: {sample.batch_tensor.device}"
                 )
-                logger.info(message)
+                logger.debug(message)
 
                 # start_spot_time = time()
 
@@ -616,7 +631,7 @@ def smartspim_cell_detection(
                         for picked_block in picked_blocks
                     ]
 
-                    logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+                    logger.debug(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
                     global_workers_spots = []
 
@@ -654,17 +669,18 @@ def smartspim_cell_detection(
                         f"Not enough samples to retrieve from workers, remaining"
                         f": {i + samples_per_iter - total_batches}"
                     )
-                    logger.info(message)
+                    logger.debug(message)
                     break
 
     if curr_picked_blocks != 0:
-        logger.info(f"Blocks not processed inside of loop: {curr_picked_blocks}")
+        logger.debug(f"Blocks not processed inside of loop: {curr_picked_blocks}")
         # Assigning blocks to execution workers
         jobs = [
-            pool.apply_async(_execute_worker, args=(picked_block,)) for picked_block in picked_blocks
+            pool.apply_async(_execute_worker, args=(picked_block,))
+            for picked_block in picked_blocks
         ]
 
-        logger.info(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
+        logger.debug(f"Dispatcher PID {os.getpid()} dispatching {len(jobs)} jobs")
 
         global_workers_spots = []
 
@@ -695,7 +711,8 @@ def smartspim_cell_detection(
                     axis=0,
                 )
 
-    end_time = time()
+    resource_monitor_spot.stop()
+    end_time = datetime.now(timezone.utc)
 
     if spots_global_coordinate is None:
         logger.info("No spots found!")
@@ -715,9 +732,10 @@ def smartspim_cell_detection(
             f"Time taken for final prunning {end_final_prunning_time - start_final_prunning_time}"
             f"before: {len(spots_global_coordinate)} After: {len(spots_global_coordinate_prunned)}"
         )
-        logger.info(message)
+        logger.debug(message)
 
-        logger.info(f"Processing time: {end_time - start_time} seconds")
+        duration_seconds = (end_time - start_time).total_seconds()
+        logger.info(f"Processing time: {duration_seconds} seconds")
 
         # Saving spots as numpy and csv
         # np.save(f"{output_folder}/spots.npy", spots_global_coordinate_prunned)
@@ -753,16 +771,17 @@ def smartspim_cell_detection(
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_SPOT_DETECTION,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_SPOT_DETECTION,
+                name="Image spot detection - " + str(dataset_path),
+                stage=ProcessStage.PROCESSING,
+                code=Code(url=__url__, name=__title__, version=__version__),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_time,
                 end_date_time=end_time,
-                input_location=str(dataset_path),
-                output_location=str(output_folder),
-                outputs={},
-                code_url="https://github.com/AllenNeuralDynamics/aind-SmartSPIM-segmentation",
-                code_version=__version__,
-                parameters={
+                output_path=str(output_folder),
+                output_parameters={
+                    "input_location": str(dataset_path),
                     "multiscale": multiscale,
                     "spot_parameters": spot_parameters,
                     "segmentation_mask_path": segmentation_mask_path,
@@ -773,17 +792,22 @@ def smartspim_cell_detection(
                         "axis_pad": axis_pad,
                         "batch_size": batch_size,
                     },
-                    "output_folder": output_folder,
+                    "output_folder": str(output_folder),
+                    "duration_seconds": duration_seconds,
                 },
                 notes=f"Detecting cell proposals in path: {dataset_path}",
+                resources=resource_monitor_spot.to_resource_usage(
+                    cpu_cores=int(utils.get_cpu_limit())
+                ),
             )
         )
 
         utils.generate_processing(
             data_processes=data_processes,
             dest_processing=str(metadata_path),
-            processor_full_name=__maintainers__[0],
+            pipeline_name=__pipeline_name__,
             pipeline_version=__pipeline_version__,
+            pipeline_url=__url__,
         )
 
     # Getting tracked resources and plotting image

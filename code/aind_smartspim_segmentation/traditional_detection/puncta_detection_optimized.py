@@ -76,6 +76,9 @@ def prune_blobs_optimized(blobs_array, distance: int, eps=0) -> cupy.ndarray:
     tree = spatial.cKDTree(blobs_array)
     pairs = np.array(list(tree.query_pairs(distance, eps=eps)))
 
+    if len(pairs) == 0:
+        return blobs_array, np.array([], dtype=int)
+
     i_indices, j_indices = zip(*pairs)
     i_indices = np.array(i_indices)
     j_indices = np.array(j_indices)
@@ -355,11 +358,14 @@ def scan_bbox(img: ArrayLike, spots: ArrayLike, radius: int) -> Iterable[Tuple[L
         x_min = int(max(0, p[2] - radius))
         x_max = int(min(width - 1, p[2] + radius))
 
-        yield p, img[
-            z_min:z_max,  # noqa: E203
-            y_min:y_max,  # noqa: E203
-            x_min:x_max,  # noqa: E203
-        ]
+        yield (
+            p,
+            img[
+                z_min:z_max,  # noqa: E203
+                y_min:y_max,  # noqa: E203
+                x_min:x_max,  # noqa: E203
+            ],
+        )
 
 
 def estimate_background_foreground(

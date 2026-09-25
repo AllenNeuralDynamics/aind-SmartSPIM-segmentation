@@ -2,19 +2,23 @@
 Scripts that runs the Code Ocean capsule
 """
 
-import json
 import logging
 import os
 import shutil
+import time
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
 import yaml
-from aind_smartspim_segmentation._shared.types import ArrayLike, PathLike
+from aind_smartspim_segmentation import __pipeline_name__, __title__, __version__
+from aind_smartspim_segmentation._shared.types import PathLike
 from aind_smartspim_segmentation.detect import smartspim_cell_detection
+from aind_smartspim_segmentation.utils import metadata_compat, utils
 from aind_smartspim_segmentation.utils import neuroglancer_utils as ng_utils
-from aind_smartspim_segmentation.utils import utils
+from log_schema import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_data_config(
@@ -51,11 +55,12 @@ def get_data_config(
     # Returning first smartspim dataset found
     # Doing this because of Code Ocean, ideally we would have
     # a single dataset in the pipeline
-    print(
-        glob(f"{data_folder}/{processing_manifest_path}"),
-        f"{data_folder}/{processing_manifest_path}",
-    )
-    processing_data = glob(f"{data_folder}/{processing_manifest_path}")[0]
+    manifest_matches = glob(f"{data_folder}/{processing_manifest_path}")
+    if not manifest_matches:
+        raise FileNotFoundError(
+            f"No processing manifest found at {data_folder}/{processing_manifest_path}"
+        )
+    processing_data = manifest_matches[0]
 
     derivatives_dict = utils.read_json_as_dict(processing_data)
     data_description_dict = utils.read_json_as_dict(f"{data_folder}/{data_description_path}")
@@ -66,7 +71,7 @@ def get_data_config(
     fname = processing_data.split("/")[-1]
     shutil.copyfile(processing_data, f"{results_folder}/{fname}")
 
-    print(f"processing manisfest copied to {results_folder}/{fname}")
+    logging.getLogger(__name__).info(f"Processing manifest copied to {results_folder}/{fname}")
 
     return derivatives_dict, smartspim_dataset
 
@@ -132,6 +137,17 @@ def run():
     data_folder = os.path.abspath("../data")
     results_folder = os.path.abspath("../results")
 
+    process_name = f"{__title__}"
+    setup_logging(
+        model={
+            "pipeline_name": __pipeline_name__,
+            "process_name": process_name,
+            "software_name": __title__,
+            "software_version": __version__,
+        }
+    )
+    start_time = time.monotonic()
+
     # It is assumed that these files
     # will be in the data folder
     required_input_elements = []
@@ -151,91 +167,141 @@ def run():
         raise ValueError("Please, provide segmentation channels.")
 
     channel_to_process = segmentation_info.get("channel")
+    dataset_name = metadata_compat.get_raw_dataset_name(smartspim_dataset_name)
 
-    # Note: The dispatcher capsule creates a single config with
-    # the channels. If the channel key does not exist, it means
-    # there are no segmentation channels splitted
-    if channel_to_process is not None:
-        # get default configs
-        smartspim_config = get_yaml(
-            os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
-        )
-        smartspim_config["axis_pad"] = int(
-            1.6
-            * max(
-                max(smartspim_config["spot_parameters"]["sigma_zyx"][1:]),
-                smartspim_config["spot_parameters"]["sigma_zyx"][0],
+    logger.info(
+        "Segmentation stage started",
+        extra={
+            "event_type": "stage_start",
+            "data_folder": data_folder,
+            "results_folder": results_folder,
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
+            "channel": channel_to_process,
+        },
+    )
+    logger.info(
+        f"Processing derived asset {smartspim_dataset_name} - channel {channel_to_process}",
+        extra={
+            "event_type": "dataset_resolved",
+            "dataset_name": dataset_name,
+            "asset_name": smartspim_dataset_name,
+            "channel": channel_to_process,
+        },
+    )
+
+    try:
+        # Note: The dispatcher capsule creates a single config with
+        # the channels. If the channel key does not exist, it means
+        # there are no segmentation channels splitted
+        if channel_to_process is not None:
+            # get default configs
+            smartspim_config = get_yaml(
+                os.path.abspath("aind_smartspim_segmentation/params/default_detect_config.yaml")
             )
-            * 5
-        )
+            smartspim_config["axis_pad"] = int(
+                1.6
+                * max(
+                    max(smartspim_config["spot_parameters"]["sigma_zyx"][1:]),
+                    smartspim_config["spot_parameters"]["sigma_zyx"][0],
+                )
+                * 5
+            )
 
-        # add paths to smartspim_config
-        smartspim_config["dataset_path"] = os.path.abspath(
-            f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}.zarr"
-        )
+            # add paths to smartspim_config
+            smartspim_config["dataset_path"] = os.path.abspath(
+                f"{pipeline_config['segmentation']['input_data']}/{channel_to_process}.zarr"
+            )
 
-        print("Files in path: ", os.listdir(smartspim_config["dataset_path"]))
+            logger.debug("Files in path: %s", os.listdir(smartspim_config["dataset_path"]))
 
-        smartspim_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
-        smartspim_config["metadata_path"] = f"{results_folder}/cell_{channel_to_process}/metadata"
+            smartspim_config["output_folder"] = f"{results_folder}/cell_{channel_to_process}"
+            smartspim_config["metadata_path"] = (
+                f"{results_folder}/cell_{channel_to_process}/metadata"
+            )
 
-        utils.create_folder(dest_dir=str(smartspim_config["metadata_path"]), verbose=True)
+            utils.create_folder(dest_dir=str(smartspim_config["metadata_path"]), verbose=True)
 
-        print("Initial cell detection config: ", smartspim_config)
+            logger.debug("Initial cell detection config: %s", smartspim_config)
 
-        smartspim_config["name"] = smartspim_dataset_name
+            smartspim_config["name"] = smartspim_dataset_name
 
-        print("Final cell segmentation config: ", smartspim_config)
+            logger.debug("Final cell segmentation config: %s", smartspim_config)
 
-        logger = utils.create_logger(output_log_path=str(smartspim_config["metadata_path"]))
-        smartspim_config["logger"] = logger
+            smartspim_config["logger"] = logger
 
-        acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
+            acquisition = utils.read_json_as_dict(f"{data_folder}/acquisition.json")
 
-        if not len(acquisition):
-            raise ValueError(f"Please, provide a valid acquisition!")
+            if not len(acquisition):
+                raise ValueError("Please, provide a valid acquisition!")
 
-        # run detection
-        proposal_df = smartspim_cell_detection(**smartspim_config)
+            # run detection
+            proposal_df = smartspim_cell_detection(**smartspim_config)
 
-        # create nueroglancer link
-        smartspim_config["channel"] = channel_to_process
+            # create nueroglancer link
+            smartspim_config["channel"] = channel_to_process
 
-        dynamic_range = ng_utils.calculate_dynamic_range(smartspim_config["dataset_path"], 99, 3)
-        res = {}
+            dynamic_range = ng_utils.calculate_dynamic_range(
+                smartspim_config["dataset_path"], 99, 3
+            )
+            x_res, y_res, z_res = metadata_compat.get_voxel_resolution(acquisition)
+            res = {"X": x_res, "Y": y_res, "Z": z_res}
 
-        axis_names = [axis["name"] for axis in acquisition["axes"]]
-        scales = [
-            float(scale)
-            for scale in acquisition["tiles"][0]["coordinate_transformations"][1]["scale"]
-        ]
-        for name, scale in zip(axis_names, scales[::-1]):
-            res[name] = scale
+            ng_config = {
+                "base_url": "https://neuroglancer-demo.appspot.com/#!",
+                "crossSectionScale": 15,
+                "projectionScale": 16384,
+                "orientation": metadata_compat.normalize_orientation(acquisition),
+                "dimensions": {
+                    "z": [res["Z"] * 10**-6, "m"],
+                    "y": [res["Y"] * 10**-6, "m"],
+                    "x": [res["X"] * 10**-6, "m"],
+                    "t": [0.001, "s"],
+                },
+                "rank": 3,
+                "gpuMemoryLimit": 1500000000,
+            }
 
-        ng_config = {
-            "base_url": "https://neuroglancer-demo.appspot.com/#!",
-            "crossSectionScale": 15,
-            "projectionScale": 16384,
-            "orientation": acquisition,
-            "dimensions": {
-                "z": [res["Z"] * 10**-6, "m"],
-                "y": [res["Y"] * 10**-6, "m"],
-                "x": [res["X"] * 10**-6, "m"],
-                "t": [0.001, "s"],
+            ng_utils.generate_neuroglancer_link(
+                proposal_df, ng_config, smartspim_config, dynamic_range, logger
+            )
+
+        else:
+            logger.warning(
+                "No segmentation channel provided in the processing manifest",
+                extra={"dataset_name": dataset_name, "status": "no_channels"},
+            )
+            logger.debug("Pipeline config without segmentation channel: %s", pipeline_config)
+            utils.save_dict_as_json(
+                filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
+                dictionary=pipeline_config,
+            )
+    except Exception as e:
+        duration_seconds = round(time.monotonic() - start_time, 3)
+        logger.error(
+            "Segmentation stage failed",
+            exc_info=True,
+            extra={
+                "event_type": "stage_failure",
+                "error": f"{type(e).__name__}: {e}",
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
+                "duration_seconds": duration_seconds,
             },
-            "rank": 3,
-            "gpuMemoryLimit": 1500000000,
-        }
-
-        ng_utils.generate_neuroglancer_link(
-            proposal_df, ng_config, smartspim_config, dynamic_range, logger
         )
-
+        raise
     else:
-        print(f"No segmentation channel, pipeline config: {pipeline_config}")
-        utils.save_dict_as_json(
-            filename=f"{results_folder}/segmentation_processing_manifest_empty.json",
-            dictionary=pipeline_config,
+        duration_seconds = round(time.monotonic() - start_time, 3)
+        logger.info(
+            "Segmentation stage completed",
+            extra={
+                "event_type": "stage_complete",
+                "dataset_name": dataset_name,
+                "asset_name": smartspim_dataset_name,
+                "channel": channel_to_process,
+                "duration_seconds": duration_seconds,
+            },
         )
 
 

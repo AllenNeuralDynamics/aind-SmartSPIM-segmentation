@@ -46,6 +46,11 @@ from .traditional_detection.puncta_detection import prune_blobs, traditional_3D_
 from .utils import utils
 
 
+# Seconds between CPU/RAM samples stored in processing.json for this step.
+# Keep large: every sample adds 360 B to the file (target < 100 KB total).
+RESOURCE_MONITOR_INTERVAL_SECONDS = 600.0
+
+
 def apply_mask(data: ArrayLike, mask: ArrayLike = None) -> ArrayLike:
     """
     Applies the mask to the current data. This
@@ -468,7 +473,7 @@ def smartspim_cell_detection(
         multiprocessing.set_start_method("spawn", force=True)
 
     start_date_time = datetime.now(timezone.utc)
-    resource_monitor_import = utils.ResourceMonitor(interval_seconds=30.0).start()
+    resource_monitor_import = utils.ResourceMonitor(interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS).start()
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:
@@ -559,7 +564,7 @@ def smartspim_cell_detection(
     logger.debug(message)
 
     start_time = datetime.now(timezone.utc)
-    resource_monitor_spot = utils.ResourceMonitor(interval_seconds=1.0).start()
+    resource_monitor_spot = utils.ResourceMonitor(interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS).start()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
 

@@ -473,7 +473,9 @@ def smartspim_cell_detection(
         multiprocessing.set_start_method("spawn", force=True)
 
     start_date_time = datetime.now(timezone.utc)
-    resource_monitor_import = utils.ResourceMonitor(interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS).start()
+    resource_monitor_import = utils.ResourceMonitor(
+        interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS
+    ).start()
 
     overlap_prediction_chunksize = (axis_pad, axis_pad, axis_pad)
     if segmentation_mask_path:
@@ -564,7 +566,9 @@ def smartspim_cell_detection(
     logger.debug(message)
 
     start_time = datetime.now(timezone.utc)
-    resource_monitor_spot = utils.ResourceMonitor(interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS).start()
+    resource_monitor_spot = utils.ResourceMonitor(
+        interval_seconds=RESOURCE_MONITOR_INTERVAL_SECONDS
+    ).start()
 
     total_batches = sum(zarr_dataset.internal_slice_sum) / batch_size
 
